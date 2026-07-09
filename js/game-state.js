@@ -250,11 +250,18 @@
 
   // ===== 胜负判定 =====
   // 检查当前是否有人胜，设置 winner / winReason
+  // 联机模式下，若对方棋子未同步（列表为空），跳过对方王存活判定，避免误判
   HF.checkWin = function (context) {
     const st = HF.state;
     const kingA = st.players.A.pieces.find(p => p.type === 'king' && p.alive);
     const kingB = st.players.B.pieces.find(p => p.type === 'king' && p.alive);
     const aAlive = !!kingA, bAlive = !!kingB;
+    // 联机模式：双方棋子必须都已同步（列表非空）才判胜负
+    if (st.mode === 'net') {
+      const aHasPieces = st.players.A.pieces.length > 0;
+      const bHasPieces = st.players.B.pieces.length > 0;
+      if (!aHasPieces || !bHasPieces) return false;
+    }
     if (!aAlive && !bAlive) {
       st.winner = 'draw'; st.winReason = '双方王同时陨落'; st.phase = 'result'; return true;
     }

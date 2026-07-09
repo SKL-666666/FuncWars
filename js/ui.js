@@ -319,8 +319,8 @@
         hideOverlays();
         refreshTopbar();
       } else if (st.mode === 'net') {
-        // 联机模式：A 布阵完成，通知对手，等待 B
-        HF.net.sendAction({ kind: 'setup_done', player: 'A' });
+        // 联机模式：A 布阵完成，通知对手（附带棋子位置供对方同步），等待 B
+        HF.net.sendAction({ kind: 'setup_done', player: 'A', pieces: st.players.A.pieces.map(p => ({ id: p.id, type: p.type, x: p.x, y: p.y, alive: p.alive })) });
         netMySetupDone = true;
         $('handoff-text').textContent = '布阵完成\n等待对手布阵...';
         st.handoffReason = 'net-wait-B';
@@ -335,8 +335,8 @@
       }
     } else {
       if (st.mode === 'net') {
-        // B 布阵完成
-        HF.net.sendAction({ kind: 'setup_done', player: 'B' });
+        // B 布阵完成（附带棋子位置供对方同步）
+        HF.net.sendAction({ kind: 'setup_done', player: 'B', pieces: st.players.B.pieces.map(p => ({ id: p.id, type: p.type, x: p.x, y: p.y, alive: p.alive })) });
         netMySetupDone = true;
         tryStartNetGame();
       } else {
@@ -456,6 +456,12 @@
     if (action.kind === 'setup_done') {
       if ((action.player === 'A' && st.myRole === 'B') ||
           (action.player === 'B' && st.myRole === 'A')) {
+        // 同步对方棋子到本地 state（盲眼博弈：state 存双方棋子用于判定，renderer 只渲染己方）
+        if (action.pieces && action.pieces.length) {
+          st.players[action.player].pieces = action.pieces.map(p => ({
+            id: p.id, type: p.type, x: p.x, y: p.y, alive: p.alive
+          }));
+        }
         netOpponentSetupDone = true;
         tryStartNetGame();
       }

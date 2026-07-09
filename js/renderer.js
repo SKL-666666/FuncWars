@@ -322,11 +322,14 @@
     }
   }
 
-  // ===== 陷阱：仅绘制当前玩家的陷阱（敌方陷阱不可见） =====
+  // ===== 陷阱：仅绘制己方陷阱（敌方陷阱不可见） =====
   function drawTraps() {
     const st = HF.state;
     if (st.phase !== 'play' && st.phase !== 'setup') return;
-    const player = st.phase === 'setup' ? st.setupPlayer : st.turn;
+    let player;
+    if (st.phase === 'setup') player = st.setupPlayer;
+    else if (st.mode === 'net') player = st.myRole;   // 联机：只看自己的陷阱
+    else player = st.turn;                              // 热座/人机：当前回合玩家
     const traps = st.players[player].traps;
     if (!traps || !traps.length) return;
     const t = performance.now() / 600;
