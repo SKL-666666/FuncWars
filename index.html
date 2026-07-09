@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>隐函数战局</title>
+<link rel="stylesheet" href="style.css?v=14" />
+<script src="https://cdn.jsdelivr.net/npm/mathjs@12.4.1/lib/browser/math.js"></script>
+<script src="peerjs.min.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- 持久游戏区（布阵 / 对战共用） -->
+  <main id="game-area" class="game-area hidden">
+    <div id="topbar" class="topbar">
+      <span id="info" class="info"></span>
+      <div id="setup-types" class="chips hidden">
+        <button id="type-king" class="chip active">王</button>
+        <button id="type-guard" class="chip">护卫</button>
+      </div>
+      <div id="action-modes" class="chips hidden">
+        <button id="btn-move" class="chip active">移动</button>
+        <button id="btn-trap" class="chip">陷阱</button>
+      </div>
+      <button id="btn-confirm-setup" class="btn primary hidden">确认布阵</button>
+    </div>
+    <div class="play-layout">
+      <div class="board-wrap">
+        <canvas id="canvas"></canvas>
+      </div>
+      <aside id="laser-panel" class="laser-panel">
+        <div class="laser-panel-title">函数激光</div>
+        <input id="laser-input" type="text" placeholder="如 y=2x 或 x=3 或 y=sin(x)" maxlength="30" autocomplete="off" />
+        <button id="btn-fire" class="btn primary">发射</button>
+        <span id="laser-hint" class="hint"></span>
+        <div class="preset-title">预设函数（系数自动补全）</div>
+        <div id="preset-list" class="preset-list"></div>
+      </aside>
+    </div>
+    <div id="action-msg" class="action-msg hidden"></div>
+  </main>
+
+  <!-- 标题屏（浮层） -->
+  <section id="screen-title" class="overlay active">
+    <div class="title-block">
+      <h1 class="game-title">隐函数战局</h1>
+      <p class="subtitle">函数 · 镜面 · 盲眼博弈</p>
+      <div class="mode-select">
+        <button id="btn-start-2p" class="btn primary">双人对战</button>
+        <button id="btn-start-ai" class="btn primary">人机对战</button>
+        <button id="btn-start-net" class="btn primary">局域网联机</button>
+      </div>
+      <div id="net-panel" class="net-panel hidden">
+        <div class="net-tabs">
+          <button id="tab-create" class="net-tab active">创建房间</button>
+          <button id="tab-join" class="net-tab">加入房间</button>
+        </div>
+        <div id="create-panel" class="net-subpanel">
+          <button id="btn-create-room" class="btn primary">生成房间号</button>
+          <div id="room-code-display" class="room-code-display hidden">
+            <label>房间号（告诉对方）</label>
+            <div id="room-code" class="room-code"></div>
+          </div>
+        </div>
+        <div id="join-panel" class="net-subpanel hidden">
+          <div class="net-row">
+            <label>房间号</label>
+            <input id="join-code-input" type="text" placeholder="如 ABCD" maxlength="6" autocomplete="off" />
+          </div>
+          <button id="btn-join-room" class="btn primary">加入房间</button>
+        </div>
+        <span id="net-status" class="net-status"></span>
+      </div>
+      <div id="difficulty-select" class="chips">
+        <button id="diff-easy" class="chip">简单</button>
+        <button id="diff-normal" class="chip active">普通</button>
+        <button id="diff-hard" class="chip">困难</button>
+      </div>
+      <button id="btn-rules" class="btn ghost">规则速览</button>
+      <div id="rules-panel" class="rules-panel hidden">
+        <p>11×11 坐标棋盘，双方各 5 子（1 王 4 护卫），秘密布阵于己方半场。</p>
+        <p>每回合三选一：<b>移动</b>（8方向1-2格，撞敌同归于尽，+12能量）· <b>激光</b>（输入y=f(x)，曲线须擦过锚点0.5内，耗30能量）· <b>陷阱</b>（相邻格埋设，耗25能量，每方限2个）。</p>
+        <p>激光遇镜面反射，遇棋子即止。<b>共振连锁</b>：命中点1格内其他棋子被连锁引爆。</p>
+        <p>踩中敌方陷阱即死。击杀或陷阱致敌王死亡即胜。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 交接屏（浮层） -->
+  <section id="screen-handoff" class="overlay">
+    <div class="handoff-block">
+      <p id="handoff-text" class="handoff-text"></p>
+      <button id="btn-ready" class="btn primary">我已准备好</button>
+    </div>
+  </section>
+
+  <!-- 结果屏（浮层） -->
+  <section id="screen-result" class="overlay">
+    <div class="result-block">
+      <h2 id="result-title" class="result-title"></h2>
+      <p id="result-reason" class="result-reason"></p>
+      <button id="btn-restart" class="btn primary">再来一局</button>
+    </div>
+  </section>
+
+</div>
+
+<script src="js/game-state.js?v=14"></script>
+<script src="js/math-engine.js?v=14"></script>
+<script src="js/renderer.js?v=14"></script>
+<script src="js/ai.js?v=14"></script>
+<script src="js/net.js?v=14"></script>
+<script src="js/ui.js?v=14"></script>
+<script src="js/main.js?v=14"></script>
+</body>
+</html>
