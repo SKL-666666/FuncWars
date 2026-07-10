@@ -5,13 +5,11 @@
 
   HF.BOARD_MIN = -5;
   HF.BOARD_MAX = 5;
-  HF.HALF_A_MAX_Y = -3; // 玩家 A 半场 y ≤ -3
-  HF.HALF_B_MIN_Y = 3;  // 玩家 B 半场 y ≥ 3
-  // 布阵区：中线到倒数第二排之间（禁止最后两排靠边，鼓励进攻）
-  HF.SETUP_A_MIN_Y = -3;  // A 最前（靠近中线）
-  HF.SETUP_A_MAX_Y = -1;  // A 最后（倒数第三排，禁止 -5,-4）
-  HF.SETUP_B_MIN_Y = 1;   // B 最前（靠近中线）
-  HF.SETUP_B_MAX_Y = 3;   // B 最后（倒数第三排，禁止 4,5）
+  // 布阵区：双方共享中线 y=0（A:y∈[-3,0], B:y∈[0,3]）
+  HF.SETUP_A_MIN_Y = -3;  // A 最后（靠底线）
+  HF.SETUP_A_MAX_Y = 0;   // A 最前（中线，与 B 共享）
+  HF.SETUP_B_MIN_Y = 0;   // B 最前（中线，与 A 共享）
+  HF.SETUP_B_MAX_Y = 3;   // B 最后（靠底线）
   HF.MAX_GUARDS = 4;
 
   // 创新玩法常量
@@ -34,6 +32,7 @@
     return {
       phase: 'title',          // title|handoff|setup|play|result
       mode: '2p',              // 2p|ai|net  （ai 模式下 B 为 AI，net 为联机）
+      difficulty: 1,           // 0=简单 1=普通 2=困难（所有模式通用）
       handoffReason: '',       // 交接屏文案
       setupPlayer: 'A',        // 布阵当前玩家
       setupType: 'king',       // 布阵待放类型
@@ -48,6 +47,8 @@
       currentLaser: null,      // 本回合激光 {points, hits, startTime}
       explosions: [],          // {x,y,startTime}
       turnCount: 1,
+      playerTurnCount: { A: 0, B: 0 },  // 各玩家自己的回合数（困难模式方块刷新用）
+      mandatoryBlocks: { A: null, B: null }, // 困难模式强制方块 {x,y}
       winner: null,            // null|'A'|'B'|'draw'
       winReason: '',
       selectedPieceId: null,
@@ -116,8 +117,11 @@
   // ===== 布阵 =====
   HF.placeSetupPiece = function (player, type, x, y) {
     const st = HF.state;
-    if (!inSetupZone(player, y)) return { ok: false, msg: '只能在最前排布阵（鼓励进攻）' };
+    if (!inSetupZone(player, y)) return { ok: false, msg: '只能在布阵区内放置（A:y∈[-3,0] B:y∈[0,3]）' };
     if (occupied(st, player, x, y)) return { ok: false, msg: '该格已有己方棋子' };
+    // 共享中线 y=0：不能放在敌方已占用的格子上
+    const enemy = player === 'A' ? 'B' : 'A';
+    if (st.players[enemy].pieces.some(pc => pc.x === x && pc.y === y)) return { ok: false, msg: '该格已被占用' };
     const p = st.players[player].pieces;
     const kings = p.filter(pc => pc.type === 'king').length;
     const guards = p.filter(pc => pc.type === 'guard').length;
@@ -281,6 +285,10 @@
     }
     if (ctx.cause === 'collision') return '致命撞击敌王';
     if (ctx.cause === 'trap') return '敌王踏入陷阱';
+    if (ctx.cause === 'mandatory_fail') {
+      const loser = winner === 'A' ? 'B' : 'A';
+      return `${loser} 方函数未经过强制方块`;
+    }
     return '敌王已亡';
   }
 
@@ -303,6 +311,60 @@
   // 坐标合法
   HF.inBoard = function (x, y) {
     return x >= HF.BOARD_MIN && x <= HF.BOARD_MAX && y >= HF.BOARD_MIN && y <= HF.BOARD_MAX;
+  };
+
+  // ===== 困难模式：强制方块 =====
+  // 为指定玩家生成一个新的强制方块（随机格点，不在棋子/障碍上，与对方方块不同）
+  HF.generateMandatoryBlock = function (player) {
+    const st = HF.state;
+    const enemy = player === 'A' ? 'B' : 'A';
+    const enemyBlock = st.mandatoryBlocks[enemy];
+    const allPieces = st.players.A.pieces.concat(st.players.B.pieces);
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const x = HF.BOARD_MIN + Math.floor(Math.random() * (HF.BOARD_MAX - HF.BOARD_MIN + 1));
+      const y = HF.BOARD_MIN + Math.floor(Math.random() * (HF.BOARD_MAX - HF.BOARD_MIN + 1));
+      if (!HF.inBoard(x, y)) continue;
+      if (allPieces.some(p => p.alive && p.x === x && p.y === y)) continue;
+      // 避开棋子相邻格（给玩家留操作空间）
+      if (allPieces.some(p => p.alive && Math.abs(p.x - x) + Math.abs(p.y - y) === 0)) continue;
+      // 与敌方方块位置不同
+      if (enemyBlock && enemyBlock.x === x && enemyBlock.y === y) continue;
+      st.mandatoryBlocks[player] = { x, y };
+      return { x, y };
+    }
+    st.mandatoryBlocks[player] = { x: 0, y: 0 };
+    return { x: 0, y: 0 };
+  };
+
+  // 检查激光曲线是否经过指定玩家的强制方块（距离 < 0.5 视为经过）
+  HF.checkMandatoryBlock = function (points, player) {
+    const st = HF.state;
+    const blk = st.mandatoryBlocks[player];
+    if (!blk) return true; // 无方块要求则通过
+    for (const pt of points) {
+      if (Math.hypot(pt.x - blk.x, pt.y - blk.y) < 0.5) return true;
+    }
+    return false;
+  };
+
+  // 强制方块未经过：发射方判负
+  HF.mandatoryFail = function (shooter) {
+    const st = HF.state;
+    st.winner = shooter === 'A' ? 'B' : 'A';
+    st.winReason = kingWinReason({ cause: 'mandatory_fail' }, st.winner);
+    st.phase = 'result';
+    return true;
+  };
+
+  // 回合开始时刷新强制方块（困难模式，每玩家每2回合刷新）
+  HF.refreshMandatoryBlockIfNeeded = function (player) {
+    const st = HF.state;
+    if (st.difficulty !== 2) return;
+    st.playerTurnCount[player]++;
+    // 第 1 回合或每 2 回合刷新
+    if (st.playerTurnCount[player] % 2 === 1) {
+      HF.generateMandatoryBlock(player);
+    }
   };
 
   // 初始默认状态（标题屏阶段，避免渲染循环访问 undefined；点开始时 newGame 重置）

@@ -50,6 +50,7 @@
       drawBoard();
       drawSetupZone();
       drawObstacles();
+      drawMandatoryBlocks();
       drawTraps();
       drawTrails();
       drawCurrentLaser();
@@ -93,17 +94,47 @@
     const st = HF.state;
     if (st.phase !== 'setup') return;
     const player = st.setupPlayer;
-    // 高亮布阵区：中线到倒数第二排之间
-    const yTop = player === 'A' ? HF.SETUP_A_MIN_Y + 0.5 : HF.SETUP_B_MAX_Y + 0.5;
-    const yBot = player === 'A' ? HF.SETUP_A_MAX_Y - 0.5 : HF.SETUP_B_MIN_Y - 0.5;
-    const tl = HF.renderer.w2s(HF.BOARD_MIN, yTop);
-    const h = scale * (yTop - yBot);
+    const minY = player === 'A' ? HF.SETUP_A_MIN_Y : HF.SETUP_B_MIN_Y;
+    const maxY = player === 'A' ? HF.SETUP_A_MAX_Y : HF.SETUP_B_MAX_Y;
+    // 高亮格点 minY..maxY 各排（世界 y 从 minY-0.5 到 maxY+0.5）
+    const top = HF.renderer.w2s(HF.BOARD_MIN, maxY + 0.5);
+    const bot = HF.renderer.w2s(HF.BOARD_MIN, minY - 0.5);
+    const h = bot.py - top.py;
     const w = scale * (HF.BOARD_MAX - HF.BOARD_MIN);
     ctx.fillStyle = 'rgba(0,255,255,0.06)';
-    ctx.fillRect(tl.px, tl.py, w, h);
+    ctx.fillRect(top.px, top.py, w, h);
     ctx.strokeStyle = 'rgba(0,255,255,0.35)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(tl.px, tl.py, w, h);
+    ctx.strokeRect(top.px, top.py, w, h);
+  }
+
+  // ===== 困难模式强制方块：仅显示当前玩家的方块 =====
+  function drawMandatoryBlocks() {
+    const st = HF.state;
+    if (st.difficulty !== 2) return;
+    if (st.phase !== 'play' && st.phase !== 'setup') return;
+    let player;
+    if (st.phase === 'setup') player = st.setupPlayer;
+    else if (st.mode === 'net') player = st.myRole;
+    else if (st.mode === 'ai') player = 'A';
+    else player = st.turn;
+    const blk = st.mandatoryBlocks[player];
+    if (!blk) return;
+    const p = HF.renderer.w2s(blk.x, blk.y);
+    const r = scale * 0.38;
+    const t = performance.now() / 500;
+    const pulse = 0.5 + 0.5 * Math.sin(t);
+    ctx.save();
+    ctx.shadowColor = '#fa0';
+    ctx.shadowBlur = 10 + pulse * 6;
+    ctx.strokeStyle = `rgba(255,170,0,${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.rect(p.px - r, p.py - r, r * 2, r * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(255,170,0,${0.1 + pulse * 0.1})`;
+    ctx.fillRect(p.px - r, p.py - r, r * 2, r * 2);
+    ctx.restore();
   }
 
   function drawObstacles() {
@@ -227,6 +258,20 @@
     for (const pc of pieces) {
       drawPiece(pc, player);
     }
+    // 布阵阶段：共享中线 y=0 上敌方的占位标记（不暴露类型）
+    if (st.phase === 'setup') {
+      const enemy = player === 'A' ? 'B' : 'A';
+      const enemyOnCenter = st.players[enemy].pieces.filter(p => p.alive && p.y === 0);
+      for (const pc of enemyOnCenter) {
+        const p = HF.renderer.w2s(pc.x, pc.y);
+        const r = scale * 0.28;
+        ctx.fillStyle = 'rgba(120,120,120,0.4)';
+        ctx.beginPath(); ctx.arc(p.px, p.py, r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(180,180,180,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.px, p.py, r, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
   }
 
   function drawPiece(pc, player) {
@@ -326,6 +371,7 @@
   // ===== 陷阱：仅绘制己方陷阱（敌方陷阱不可见） =====
   function drawTraps() {
     const st = HF.state;
+    if (st.difficulty === 0) return; // 简单模式无陷阱
     if (st.phase !== 'play' && st.phase !== 'setup') return;
     let player;
     if (st.phase === 'setup') player = st.setupPlayer;
@@ -364,6 +410,7 @@
   // ===== 陷阱模式提示：选中棋子周围可埋陷阱的格 =====
   function drawTrapHints() {
     const st = HF.state;
+    if (st.difficulty === 0) return; // 简单模式无陷阱
     if (st.phase !== 'play') return;
     if (st.actionMode !== 'trap') return;
     if (!st.selectedPieceId) return;
@@ -437,6 +484,7 @@
   // ===== 陷阱计数（右上角） =====
   function drawTrapCount() {
     const st = HF.state;
+    if (st.difficulty === 0) return; // 简单模式无陷阱
     if (st.phase !== 'play' && st.phase !== 'setup') return;
     const player = st.phase === 'setup' ? st.setupPlayer : (st.mode === 'net' ? st.myRole : st.turn);
     const pl = st.players[player];

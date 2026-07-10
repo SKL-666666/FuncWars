@@ -441,6 +441,7 @@ html, body {
 }
 .mode-select .btn { min-width: 140px; }
 #difficulty-select { margin-top: -4px; }
+.diff-label { color: #688; font-size: 12px; margin-right: 4px; }
 
 /* ===== 联机面板 ===== */
 .net-panel {

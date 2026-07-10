@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>函数战局</title>
-<link rel="stylesheet" href="style.css?v=18" />
+<link rel="stylesheet" href="style.css?v=19" />
 <script src="https://cdn.jsdelivr.net/npm/mathjs@12.4.1/lib/browser/math.js"></script>
 <script src="peerjs.min.js"></script>
 </head>
@@ -74,16 +74,17 @@
         <span id="net-status" class="net-status"></span>
       </div>
       <div id="difficulty-select" class="chips">
+        <span class="diff-label">难度</span>
         <button id="diff-easy" class="chip">简单</button>
         <button id="diff-normal" class="chip active">普通</button>
         <button id="diff-hard" class="chip">困难</button>
       </div>
       <button id="btn-rules" class="btn ghost">规则速览</button>
       <div id="rules-panel" class="rules-panel hidden">
-        <p>11×11 坐标棋盘，双方各 5 子（1 王 4 护卫），秘密布阵于己方半场。</p>
+        <p>11×11 坐标棋盘，双方各 5 子（1 王 4 护卫），布阵于己方区域（共享中线 y=0）。</p>
         <p>每回合三选一：<b>移动</b>（8方向1-2格，撞敌同归于尽）· <b>激光</b>（输入y=f(x)，曲线须擦过锚点0.5内）· <b>陷阱</b>（相邻格埋设，每方限3个）。</p>
         <p>激光遇镜面反射，遇棋子即止。<b>共振连锁</b>：命中点1格内其他棋子被连锁引爆。</p>
-        <p>踩中敌方陷阱即死。击杀或陷阱致敌王死亡即胜。</p>
+        <p><b>简单</b>：无陷阱 · <b>普通</b>：含陷阱 · <b>困难</b>：每两回合刷新强制方块，函数必须经过否则判负。</p>
       </div>
     </div>
   </section>
@@ -107,12 +108,12 @@
 
 </div>
 
-<script src="js/game-state.js?v=18"></script>
-<script src="js/math-engine.js?v=18"></script>
-<script src="js/renderer.js?v=18"></script>
-<script src="js/ai.js?v=18"></script>
-<script src="js/net.js?v=18"></script>
-<script src="js/ui.js?v=18"></script>
-<script src="js/main.js?v=18"></script>
+<script src="js/game-state.js?v=19"></script>
+<script src="js/math-engine.js?v=19"></script>
+<script src="js/renderer.js?v=19"></script>
+<script src="js/ai.js?v=19"></script>
+<script src="js/net.js?v=19"></script>
+<script src="js/ui.js?v=19"></script>
+<script src="js/main.js?v=19"></script>
 </body>
 </html>

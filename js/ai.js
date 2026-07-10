@@ -16,6 +16,9 @@
     const occupied = new Set();
     const key = (x, y) => x + ',' + y;
     const inZone = (x, y) => y >= minY && y <= maxY && HF.inBoard(x, y);
+    // 共享中线：避开敌方已放置的棋子
+    const enemy = player === 'A' ? 'B' : 'A';
+    for (const pc of st.players[enemy].pieces) occupied.add(key(pc.x, pc.y));
     const placed = [];
 
     // 评估格点对王的隐蔽性：被障碍物遮挡越多越好 + 靠边
@@ -127,7 +130,7 @@
     }
 
     // 归一化
-    let total = 0;
+    total = 0;
     for (const v of grid.values()) total += v;
     if (total > 0) for (const [k, v] of grid) grid.set(k, v / total);
 
@@ -323,10 +326,18 @@
 
     // === 候选 1：激光发射 ===
     if (canLaser) {
+      // 困难模式：强制方块目标
+      const myBlock = st.difficulty === 2 ? st.mandatoryBlocks[myPlayer] : null;
       for (const anchor of myPieces) {
         const descs = [];
         for (const desc of targetedCurves({ x: anchor.x, y: anchor.y }, topTargets.slice(0, 3))) {
           descs.push(desc);
+        }
+        // 困难模式：生成经过锚点+强制方块的曲线
+        if (myBlock) {
+          for (const desc of targetedCurves({ x: anchor.x, y: anchor.y }, [myBlock])) {
+            descs.push(desc);
+          }
         }
         const exploreCount = HF.ai.difficulty === 2 ? 4 : (HF.ai.difficulty === 1 ? 2 : 1);
         for (const tmpl of AI_TEMPLATES) {
@@ -338,7 +349,14 @@
           if (!r.ok) continue;
           const dist = HF.anchorDistance(r.curve, anchor.x, anchor.y);
           if (dist >= 0.5) continue;
+          // 生成激光轨迹用于检查强制方块
+          const laserRes = HF.generateLaser(r.curve, { x: anchor.x, y: anchor.y }, [], anchor.id, true);
+          const passesBlock = myBlock ? HF.checkMandatoryBlock(laserRes.points, myPlayer) : true;
+          // 困难模式：未经过强制方块的曲线大幅降分（发射即判负）
+          let blockPenalty = 0;
+          if (myBlock && !passesBlock) blockPenalty = 2000;
           let score = expectedLaserScore(r.curve, { x: anchor.x, y: anchor.y }, anchor.id, myPlayer, prob);
+          score -= blockPenalty;
           if (myKing.id !== anchor.id) {
             const myResult = HF.generateLaser(r.curve, { x: anchor.x, y: anchor.y }, [myKing], anchor.id, true);
             for (const pt of myResult.points) {

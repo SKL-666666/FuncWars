@@ -251,13 +251,28 @@
       actionModes.classList.remove('hidden');
       const pl = st.players[st.turn];
       const alive = HF.alivePieces(st.turn).length;
-      $('info').textContent = `玩家 ${st.turn} · 第 ${st.turnCount}回合 · 存活${alive} · 陷阱${pl.traps.length}/${HF.MAX_TRAPS}`;
+      let info = `玩家 ${st.turn} · 第 ${st.turnCount}回合 · 存活${alive}`;
+      if (st.difficulty === 0) {
+        // 简单模式：无陷阱
+        $('btn-trap').classList.add('hidden');
+        if (st.actionMode === 'trap') { st.actionMode = 'move'; }
+      } else {
+        $('btn-trap').classList.remove('hidden');
+        info += ` · 陷阱${pl.traps.length}/${HF.MAX_TRAPS}`;
+      }
+      if (st.difficulty === 2 && st.mandatoryBlocks[st.turn]) {
+        const b = st.mandatoryBlocks[st.turn];
+        info += ` · 必经(${b.x},${b.y})`;
+      }
+      $('info').textContent = info;
       setActionMode(st.actionMode);
     }
   }
 
-  // ===== 难度选择 =====
+  // ===== 难度选择（所有模式通用） =====
+  let selectedDifficulty = 1;
   function setDifficulty(d) {
+    selectedDifficulty = d;
     HF.ai.difficulty = d;
     $('diff-easy').classList.toggle('active', d === 0);
     $('diff-normal').classList.toggle('active', d === 1);
@@ -268,6 +283,7 @@
   function setActionMode(mode) {
     const st = HF.state;
     if (st.phase !== 'play') return;
+    if (mode === 'trap' && st.difficulty === 0) return; // 简单模式无陷阱
     st.actionMode = mode;
     $('btn-move').classList.toggle('active', mode === 'move');
     $('btn-trap').classList.toggle('active', mode === 'trap');
@@ -280,6 +296,8 @@
   function onStart(mode) {
     HF.newGame();
     HF.state.mode = mode;
+    HF.state.difficulty = selectedDifficulty;
+    HF.ai.difficulty = selectedDifficulty;
     refreshTopbar._resized = false;  // 重置 resize 标志，让首次显示时重新 resize
     if (mode === 'ai') {
       // 人机模式：玩家为 A，AI 为 B。A 先布阵
@@ -309,6 +327,7 @@
       refreshTopbar();
     } else {
       st.phase = 'play';
+      refreshMandatoryBlockForCurrentTurn();
       showGameArea(true);
       hideOverlays();
       refreshTopbar();
@@ -320,10 +339,18 @@
     if (!HF.setupComplete(st.setupPlayer)) return;
     if (st.setupPlayer === 'A') {
       if (st.mode === 'ai') {
-        HF.ai.doSetup('B');
+        try {
+          HF.ai.doSetup('B');
+        } catch (e) {
+          // 防御：doSetup 异常时手动放置 B 的棋子，避免卡死
+          console.error('AI doSetup error:', e);
+          aiSetupFallback('B');
+        }
         st.turn = 'A';
         st.turnCount = 1;
         st.phase = 'play';
+        initMandatoryBlocks();
+        refreshMandatoryBlockForCurrentTurn();
         showGameArea(true);
         hideOverlays();
         refreshTopbar();
@@ -353,10 +380,53 @@
         st.turnCount = 1;
         st.handoffReason = 'turn-A';
         st.phase = 'handoff';
+        initMandatoryBlocks();
         $('handoff-text').textContent = `布阵完成\n请将设备交给玩家 A · 第 1 回合`;
         showOverlay('handoff');
       }
     }
+  }
+
+  // AI 布阵失败时的兜底：简单放置 1 王 + 4 护卫
+  function aiSetupFallback(player) {
+    const st = HF.state;
+    const minY = player === 'A' ? HF.SETUP_A_MIN_Y : HF.SETUP_B_MIN_Y;
+    const maxY = player === 'A' ? HF.SETUP_A_MAX_Y : HF.SETUP_B_MAX_Y;
+    const enemy = player === 'A' ? 'B' : 'A';
+    const enemyCells = new Set(st.players[enemy].pieces.map(p => p.x + ',' + p.y));
+    const cells = [];
+    for (let x = HF.BOARD_MIN; x <= HF.BOARD_MAX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        if (!enemyCells.has(x + ',' + y)) cells.push({ x, y });
+      }
+    }
+    st.players[player].pieces = [];
+    // 王放靠边的位置
+    if (cells.length) {
+      const k = cells.reduce((a, b) => Math.abs(a.x) > Math.abs(b.x) ? a : b);
+      st.players[player].pieces.push({ id: player + '-0', owner: player, type: 'king', x: k.x, y: k.y, alive: true });
+    }
+    // 护卫放剩余位置
+    for (let i = 0; i < HF.MAX_GUARDS && cells.length > st.players[player].pieces.length; i++) {
+      const c = cells[i % cells.length];
+      if (st.players[player].pieces.some(p => p.x === c.x && p.y === c.y)) continue;
+      st.players[player].pieces.push({ id: player + '-' + (i + 1), owner: player, type: 'guard', x: c.x, y: c.y, alive: true });
+    }
+  }
+
+  // 困难模式：初始化双方强制方块
+  function initMandatoryBlocks() {
+    const st = HF.state;
+    if (st.difficulty !== 2) return;
+    st.playerTurnCount = { A: 0, B: 0 };
+    st.mandatoryBlocks = { A: null, B: null };
+  }
+
+  // 困难模式：当前回合玩家刷新强制方块
+  function refreshMandatoryBlockForCurrentTurn() {
+    const st = HF.state;
+    if (st.difficulty !== 2) return;
+    HF.refreshMandatoryBlockIfNeeded(st.turn);
   }
 
   // ===== 联机模式（PeerJS P2P）=====
@@ -406,6 +476,8 @@
     HF.newGame();
     const st = HF.state;
     st.mode = 'net';
+    st.difficulty = selectedDifficulty;
+    HF.ai.difficulty = selectedDifficulty;
     st.myRole = netMyRole;
     st.setupPlayer = netMyRole;
     netOpponentSetupDone = false;
@@ -439,6 +511,8 @@
     st.handoffReason = '';
     netMySetupDone = false;
     netOpponentSetupDone = false;
+    initMandatoryBlocks();
+    refreshMandatoryBlockForCurrentTurn();
     showGameArea(true);
     hideOverlays();
     refreshTopbar();
@@ -477,6 +551,13 @@
       return;
     }
     if (st.phase !== 'play') return;
+    // 强制方块失败通知：对手激光未经过方块，对手判负
+    if (action.type === 'mandatory_fail') {
+      st.busy = false;
+      HF.mandatoryFail(action.loser);
+      showResult();
+      return;
+    }
     // 重放对手动作
     replayOpponentAction(action);
   }
@@ -551,6 +632,8 @@
       showMsg(msg);
       const animTime = resonance.chains.length ? 4000 : 3100;
       setTimeout(() => {
+        // 若期间收到 mandatory_fail 已结束游戏，跳过
+        if (st.phase === 'result') return;
         st.trails.push({ points: result.points, player: st.turn });
         st.currentLaser = null;
         st.resonanceChain = null;
@@ -567,6 +650,7 @@
   function nextTurnHandoffNet() {
     const st = HF.state;
     HF.endTurn();
+    refreshMandatoryBlockForCurrentTurn();
     st.phase = 'play';
     showGameArea(true);
     hideOverlays();
@@ -787,6 +871,13 @@
     const result = HF.generateLaser(curve, { x: anchor.x, y: anchor.y }, allPieces, anchor.id);
     st.currentLaser = { points: result.points, hits: result.hits, startTime: performance.now() };
 
+    // 困难模式：检查强制方块
+    const blockPassed = HF.checkMandatoryBlock(result.points, st.turn);
+    // 联机模式：失败时立即通知对手
+    if (!blockPassed && st.mode === 'net') {
+      HF.net.sendAction({ type: 'mandatory_fail', loser: st.turn });
+    }
+
     // 销毁直接命中棋子
     const killed = [];
     for (const h of result.hits) {
@@ -799,7 +890,9 @@
 
     $('laser-hint').textContent = '';
     let msg;
-    if (killed.length) {
+    if (!blockPassed) {
+      msg = `函数未经过强制方块！${st.turn} 方判负`;
+    } else if (killed.length) {
       const names = killed.map(k => k.type === 'king' ? '王' : '护卫').join('、');
       msg = `激光命中：${names}`;
     } else {
@@ -819,6 +912,11 @@
       st.resonanceChain = null;
       st.busy = false;
       clearMsg();
+      if (!blockPassed) {
+        HF.mandatoryFail(st.turn);
+        showResult();
+        return;
+      }
       const ctx = { cause: 'laser', shooter: st.turn };
       if (HF.checkWin(ctx)) { showResult(); return; }
       if (st.mode === 'net') nextTurnHandoffNet();
@@ -829,6 +927,7 @@
   function nextTurnHandoff() {
     const st = HF.state;
     HF.endTurn();
+    refreshMandatoryBlockForCurrentTurn();
     // AI 模式下，AI 回合跳过交接屏，延迟后自动执行
     if (st.mode === 'ai' && st.turn === 'B') {
       st.phase = 'play';
@@ -915,6 +1014,8 @@
     const allPieces = st.players.A.pieces.concat(st.players.B.pieces);
     const result = HF.generateLaser(action.curve, { x: anchor.x, y: anchor.y }, allPieces, anchor.id);
     st.currentLaser = { points: result.points, hits: result.hits, startTime: performance.now() };
+    // 困难模式：检查 AI 强制方块
+    const blockPassed = HF.checkMandatoryBlock(result.points, 'B');
     const killed = [];
     for (const h of result.hits) { h.piece.alive = false; killed.push(h.piece); }
     // 共振连锁
@@ -922,7 +1023,9 @@
     const resonance = HF.applyResonance(hitPoints);
 
     let msg;
-    if (killed.length) {
+    if (!blockPassed) {
+      msg = `AI 函数未经过强制方块！B 方判负`;
+    } else if (killed.length) {
       const names = killed.map(k => k.type === 'king' ? '王' : '护卫').join('、');
       msg = `AI 激光命中：${names}`;
     } else {
@@ -940,6 +1043,11 @@
       st.resonanceChain = null;
       st.busy = false;
       clearMsg();
+      if (!blockPassed) {
+        HF.mandatoryFail('B');
+        showResult();
+        return;
+      }
       const ctx = { cause: 'laser', shooter: 'B' };
       if (HF.checkWin(ctx)) { showResult(); return; }
       nextTurnHandoff();
