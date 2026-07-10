@@ -455,7 +455,9 @@
     if (st.mode === 'net') {
       if (st.myRole === 'A') {
         HF.refreshMandatoryBlockIfNeeded();
-        const active = st.turnCount % 2 === 1 ? 'A' : 'B';
+        // 广播当前需击中玩家的方块（若有）
+        const bigTurn = Math.ceil(st.turnCount / 2);
+        const active = bigTurn % 2 === 1 ? 'A' : 'B';
         const blk = st.mandatoryBlocks[active];
         if (blk) HF.net.sendAction({ type: 'mandatory_block', player: active, x: blk.x, y: blk.y });
       }

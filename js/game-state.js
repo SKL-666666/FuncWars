@@ -375,16 +375,20 @@
     return true;
   };
 
-  // 回合开始时刷新强制方块（困难模式：A/B 交替，全局 turnCount 驱动）
-  // 奇数回合→A需击中（B无限制）；偶数回合→B需击中（A无限制）
+  // 回合开始时刷新强制方块（困难模式：大回合交替，A/B各操作一次为1大回合）
+  // 大回合 = ceil(turnCount/2)；奇数大回合→A需击中，偶数大回合→B需击中
+  // 当前操作者若==需击中玩家则生成方块，否则本回合自由
   HF.refreshMandatoryBlockIfNeeded = function () {
     const st = HF.state;
     if (st.difficulty !== 2) return;
-    // 清空双方，只给当前回合玩家生成
     st.mandatoryBlocks.A = null;
     st.mandatoryBlocks.B = null;
-    const active = st.turnCount % 2 === 1 ? 'A' : 'B';
-    HF.generateMandatoryBlock(active);
+    const bigTurn = Math.ceil(st.turnCount / 2);  // 大回合号
+    const active = bigTurn % 2 === 1 ? 'A' : 'B';   // 该大回合需击中的玩家
+    // 只有当前操作者==需击中玩家时才生成方块
+    if (st.turn === active) {
+      HF.generateMandatoryBlock(active);
+    }
   };
 
   // 初始默认状态（标题屏阶段，避免渲染循环访问 undefined；点开始时 newGame 重置）
