@@ -439,7 +439,7 @@
         for (const desc of descs) {
           const r = buildCurveSimple(desc);
           if (!r.ok) continue;
-          if (isPowerfulDesc(desc) && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_GAME) continue;
+          if (isPowerfulDesc(desc) && st.powerfulLaserCredits <= 0) continue;
           const dist = HF.anchorDistance(r.curve, anchor.x, anchor.y);
           if (dist >= 0.5) continue;
           // 强制方块检查
@@ -590,6 +590,14 @@
         }
       }
       if (moves.length) return moves[Math.floor(Math.random() * moves.length)];
+    }
+
+    // 类人：无强力额度且当前行动收益不高时，跳过回合积攒额度（残局更倾向跳过）
+    if (st.powerfulLaserCredits <= 0 && bestScore < 8) {
+      const skipChance = isLateGame ? 0.45 : 0.2;
+      if (Math.random() < skipChance) {
+        return { type: 'skip' };
+      }
     }
 
     return bestAction;

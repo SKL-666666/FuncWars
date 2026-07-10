@@ -201,8 +201,8 @@ html, body {
   }
   .laser-panel .btn { padding: 8px; font-size: 14px; }
   .preset-list { max-height: 120px; }
-  .preset-item { padding: 8px 10px; font-size: 12px; }
-  .preset-item .preset-name { font-size: 9px; }
+  .preset-item { padding: 8px 10px; font-size: 13px; }
+  .preset-item .preset-name { font-size: 10px; }
   .preset-controls { padding: 8px; }
   .slider-row { gap: 6px; font-size: 11px; }
   .slider-row label { width: 14px; }
@@ -295,13 +295,17 @@ html, body {
   border: 1px solid rgba(255,255,255,0.08);
   padding: 10px 12px;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: 15px;
   font-family: "Consolas", monospace;
   cursor: pointer;
   text-align: left;
   transition: all 0.15s;
   line-height: 1.4;
   flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
 }
 .preset-item:hover {
   background: rgba(0,255,255,0.06);
@@ -310,7 +314,7 @@ html, body {
 }
 .preset-item .preset-name {
   color: #678;
-  font-size: 10px;
+  font-size: 12px;
   display: block;
   margin-bottom: 3px;
   letter-spacing: 0.5px;
@@ -322,6 +326,24 @@ html, body {
   box-shadow: 0 0 8px rgba(0,255,255,0.2);
 }
 .preset-item.active .preset-name { color: #5bb; }
+.preset-item.powerful {
+  border-color: rgba(255,170,0,0.3);
+}
+.preset-item.powerful.active {
+  border-color: #fa0;
+  box-shadow: 0 0 8px rgba(255,170,0,0.3);
+}
+.powerful-tag {
+  display: inline-block;
+  background: rgba(255,170,0,0.15);
+  color: #fa0;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  border: 1px solid rgba(255,170,0,0.3);
+  flex-shrink: 0;
+}
 .preset-switch {
   display: flex;
   justify-content: space-between;

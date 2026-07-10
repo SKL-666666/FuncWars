@@ -40,6 +40,8 @@
       // 陷阱模式
       $('btn-trap').addEventListener('click', () => setActionMode('trap'));
       $('btn-move').addEventListener('click', () => setActionMode('move'));
+      // 跳过回合获取强力额度
+      $('btn-skip').addEventListener('click', onSkip);
       // 结果
       $('btn-restart').addEventListener('click', onRestart);
       // canvas 交互
@@ -112,8 +114,9 @@
     list.innerHTML = '';
     PRESETS.forEach((p, idx) => {
       const el = document.createElement('button');
-      el.className = 'preset-item';
-      el.innerHTML = `<span class="preset-name">${p.name}</span>`;
+      const powerful = HF.POWERFUL_PRESETS.some(kw => p.name.indexOf(kw) >= 0);
+      el.className = 'preset-item' + (powerful ? ' powerful' : '');
+      el.innerHTML = `<span class="preset-name">${p.name}</span>${powerful ? '<span class="powerful-tag">强力</span>' : ''}`;
       el.addEventListener('click', () => selectPreset(idx));
       list.appendChild(el);
     });
@@ -149,8 +152,9 @@
     } else {
       PRESETS.forEach((p, idx) => {
         const el = document.createElement('button');
-        el.className = 'preset-item' + (idx === activePresetIdx ? ' active' : '');
-        el.innerHTML = `<span class="preset-name">${p.name}</span>`;
+        const powerful = HF.POWERFUL_PRESETS.some(kw => p.name.indexOf(kw) >= 0);
+        el.className = 'preset-item' + (idx === activePresetIdx ? ' active' : '') + (powerful ? ' powerful' : '');
+        el.innerHTML = `<span class="preset-name">${p.name}</span>${powerful ? '<span class="powerful-tag">强力</span>' : ''}`;
         el.addEventListener('click', () => selectPreset(idx));
         list.appendChild(el);
       });
@@ -231,8 +235,7 @@
     st.previewLaser = { points: result.points };
     if (dist < 0.5) {
       const powerful = isPowerfulFunction(activePresetIdx, r.label, desc);
-      const remain = HF.POWERFUL_MAX_PER_GAME - st.powerfulLaserUsed;
-      const tag = powerful ? (remain > 0 ? ` [强力 剩${remain}/${HF.POWERFUL_MAX_PER_GAME}局]` : ` [强力已用尽]`) : ' [简单 无限]';
+      const tag = powerful ? (st.powerfulLaserCredits > 0 ? ` [强力 额度${st.powerfulLaserCredits}]` : ` [强力无额度·可跳过获取]`) : ' [简单 无限]';
       flashHint('预览：' + r.label + ' ✓' + tag);
     } else {
       flashHint('预览：' + r.label + ' (距锚点' + dist.toFixed(2) + '，需<0.5)');
@@ -292,9 +295,8 @@
         const b = st.mandatoryBlocks[st.turn];
         info += ` · 必经(${b.x},${b.y})`;
       }
-      // 强大函数剩余次数提示（三角/参数化曲线每局限1次）
-      const remain = HF.POWERFUL_MAX_PER_GAME - st.powerfulLaserUsed;
-      info += ` · 强力${remain}/${HF.POWERFUL_MAX_PER_GAME}局`;
+      // 强力函数额度提示（初始0，跳过回合获得1次）
+      info += ` · 强力额度${st.powerfulLaserCredits}`;
       $('info').textContent = info;
       setActionMode(st.actionMode);
     }
@@ -658,6 +660,15 @@
       } else {
         nextTurnHandoffNet();
       }
+    } else if (action.type === 'skip') {
+      st.busy = true;
+      st.powerfulLaserCredits++;
+      showMsg('对手跳过回合 · 强力额度+1');
+      setTimeout(() => {
+        st.busy = false;
+        clearMsg();
+        nextTurnHandoffNet();
+      }, 1500);
     } else if (action.type === 'laser') {
       const anchor = st.players[st.turn].pieces.find(p => p.id === action.pieceId && p.alive);
       if (!anchor) { nextTurnHandoffNet(); return; }
@@ -862,6 +873,28 @@
     }, 1500);
   }
 
+  // ===== 跳过回合获取强力函数额度 =====
+  function onSkip() {
+    const st = HF.state;
+    if (st.busy) return;
+    if (st.phase !== 'play') return;
+    st.busy = true;
+    st.selectedPieceId = null;
+    st.previewLaser = null;
+    st.powerfulLaserCredits++;
+    // 联机模式广播
+    if (st.mode === 'net') {
+      HF.net.sendAction({ type: 'skip' });
+    }
+    showMsg(`跳过本回合 · 强力额度+1（当前 ${st.powerfulLaserCredits}）`);
+    setTimeout(() => {
+      st.busy = false;
+      clearMsg();
+      if (st.mode === 'net') nextTurnHandoffNet();
+      else nextTurnHandoff();
+    }, 1500);
+  }
+
   // ===== 执行埋陷阱 =====
   function executeTrap(piece, x, y) {
     const st = HF.state;
@@ -912,16 +945,16 @@
     const dist = HF.anchorDistance(curve, anchor.x, anchor.y);
     if (dist >= 0.5) { flashHint(`锚点到曲线距离 ${dist.toFixed(2)} ≥ 0.5，发射无效`); return; }
 
-    // 强大函数次数限制：三角/参数化曲线每局限1次，简单函数无限制
+    // 强力函数额度限制：三角/参数化曲线需消耗1额度，简单函数无限制
     const isPowerful = isPowerfulFunction(activePresetIdx, label, desc);
-    if (isPowerful && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_GAME) {
-      flashHint(`强力函数本局已用尽（每局限${HF.POWERFUL_MAX_PER_GAME}次），请使用简单函数或移动/陷阱`);
+    if (isPowerful && st.powerfulLaserCredits <= 0) {
+      flashHint(`强力函数无额度，请跳过本回合获取（或使用简单函数/移动/陷阱）`);
       return;
     }
 
     st.busy = true;
     st.previewLaser = null;
-    if (isPowerful) st.powerfulLaserUsed++;
+    if (isPowerful) st.powerfulLaserCredits--;
     // 联机模式广播（包含曲线描述供对手重放）
     if (st.mode === 'net') {
       HF.net.sendAction({ type: 'laser', pieceId: anchor.id, desc: desc });
@@ -1023,7 +1056,21 @@
       executeAIMove(action);
     } else if (action.type === 'trap') {
       executeAITrap(action);
+    } else if (action.type === 'skip') {
+      executeAISkip();
     }
+  }
+
+  function executeAISkip() {
+    const st = HF.state;
+    st.busy = true;
+    st.powerfulLaserCredits++;
+    showMsg(`AI 跳过回合 · 强力额度+1（当前 ${st.powerfulLaserCredits}）`);
+    setTimeout(() => {
+      st.busy = false;
+      clearMsg();
+      nextTurnHandoff();
+    }, 1500);
   }
 
   function executeAIMove(action) {
@@ -1065,8 +1112,8 @@
     const anchor = st.players.B.pieces.find(p => p.id === action.pieceId && p.alive);
     if (!anchor) { nextTurnHandoff(); return; }
     st.busy = true;
-    // 强大函数计数
-    if (action.label && /sin|cos|tan|tanh/.test(action.label)) st.powerfulLaserUsed++;
+    // 强力函数消耗额度（AI 发射强力函数时，扣减 AI 的额度）
+    if (action.label && /sin|cos|tan|tanh/.test(action.label)) st.powerfulLaserCredits = Math.max(0, st.powerfulLaserCredits - 1);
     // 记录 AI 用过的曲线标签，避免重复
     if (action.label && HF.ai && HF.ai.recentLasers) {
       HF.ai.recentLasers.push(action.label);
