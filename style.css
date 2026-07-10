@@ -15,6 +15,7 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -155,6 +156,88 @@ html, body {
   border-radius: 10px;
   overflow-y: auto;
   backdrop-filter: blur(8px);
+}
+
+/* ===== 手机适配（竖屏） ===== */
+@media (max-width: 768px) {
+  #app {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .game-area {
+    padding: 4px;
+    gap: 4px;
+  }
+  .topbar {
+    gap: 6px;
+    padding: 4px 6px;
+    min-height: 34px;
+    max-width: 100%;
+  }
+  .info { font-size: 11px; letter-spacing: 0.3px; }
+  .chip { padding: 4px 10px; font-size: 12px; }
+  .btn { padding: 6px 14px; font-size: 13px; }
+  /* 纵向堆叠：棋盘在上，面板在下可折叠 */
+  .play-layout {
+    flex-direction: column;
+    gap: 6px;
+    max-width: 100%;
+  }
+  .play-layout .board-wrap {
+    flex: 1 1 60%;
+    min-height: 0;
+  }
+  .laser-panel {
+    width: 100%;
+    flex: 0 0 auto;
+    max-height: 40vh;
+    padding: 8px;
+    gap: 6px;
+    border-radius: 8px;
+  }
+  .laser-panel input {
+    font-size: 16px;  /* 防 iOS 缩放 */
+    padding: 8px 10px;
+  }
+  .laser-panel .btn { padding: 8px; font-size: 14px; }
+  .preset-list { max-height: 120px; }
+  .preset-item { padding: 8px 10px; font-size: 12px; }
+  .preset-item .preset-name { font-size: 9px; }
+  .preset-controls { padding: 8px; }
+  .slider-row { gap: 6px; font-size: 11px; }
+  .slider-row label { width: 14px; }
+  .slider-row input[type="range"] {
+    height: 24px;  /* 增大触摸区域 */
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+  }
+  .slider-val { width: 36px; font-size: 10px; }
+  .laser-panel-title { font-size: 12px; }
+  .preset-title { font-size: 10px; }
+  .hint { font-size: 10px; }
+  .game-title { font-size: 36px; letter-spacing: 6px; }
+  .mode-select .btn { min-width: 120px; }
+  .room-code { font-size: 28px; letter-spacing: 6px; }
+  .net-row input { font-size: 16px; }  /* 防 iOS 缩放 */
+  .handoff-text { font-size: 18px; letter-spacing: 2px; }
+  .result-title { font-size: 32px; letter-spacing: 4px; }
+  .action-msg { font-size: 12px; padding: 8px 16px; bottom: 12px; }
+}
+
+/* ===== 手机横屏 ===== */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+  .play-layout { max-width: 100%; gap: 6px; }
+  .laser-panel {
+    width: 280px;
+    flex: 0 0 280px;
+    max-height: 100%;
+  }
+  .laser-panel input { font-size: 16px; }
+  .topbar { padding: 2px 6px; min-height: 30px; }
+  .info { font-size: 10px; }
+  .chip { padding: 3px 8px; font-size: 11px; }
 }
 .laser-panel.hidden { display: none; }
 .laser-panel::-webkit-scrollbar { width: 6px; }

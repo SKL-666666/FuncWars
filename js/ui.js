@@ -225,7 +225,8 @@
   }
   function refreshTopbar() {
     const st = HF.state;
-    HF.renderer.resize();
+    // 延迟到下一帧 resize，确保 DOM 布局已完成（修复初始棋盘过小）
+    requestAnimationFrame(() => HF.renderer.resize());
     const setupTypes = $('setup-types');
     const confirmBtn = $('btn-confirm-setup');
     const laserPanel = $('laser-panel');
@@ -834,6 +835,12 @@
       showMsg(`AI(${diffName}) 思考中...`);
       const thinkTime = HF.ai.difficulty === 2 ? 1600 : (HF.ai.difficulty === 1 ? 1100 : 800);
       setTimeout(() => { clearMsg(); runAITurn(); }, thinkTime);
+    } else if (st.mode === 'ai' && st.turn === 'A') {
+      // 人机模式回到玩家 A 回合，无需交接屏
+      st.phase = 'play';
+      showGameArea(true);
+      hideOverlays();
+      refreshTopbar();
     } else {
       st.handoffReason = 'turn-' + st.turn;
       st.phase = 'handoff';

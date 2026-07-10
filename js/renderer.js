@@ -329,7 +329,8 @@
     let player;
     if (st.phase === 'setup') player = st.setupPlayer;
     else if (st.mode === 'net') player = st.myRole;   // 联机：只看自己的陷阱
-    else player = st.turn;                              // 热座/人机：当前回合玩家
+    else if (st.mode === 'ai') player = 'A';           // 人机：始终显示玩家A的陷阱
+    else player = st.turn;                              // 热座：当前回合玩家
     const traps = st.players[player].traps;
     if (!traps || !traps.length) return;
     const t = performance.now() / 600;
