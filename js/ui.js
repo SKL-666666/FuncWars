@@ -134,13 +134,27 @@
   function renderPresetControls() {
     const list = $('preset-list');
     list.innerHTML = '';
-    PRESETS.forEach((p, idx) => {
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    // 手机端：已选中预设时，列表折叠为"切换函数"按钮
+    if (isMobile && activePresetIdx >= 0) {
+      const cur = PRESETS[activePresetIdx];
       const el = document.createElement('button');
-      el.className = 'preset-item' + (idx === activePresetIdx ? ' active' : '');
-      el.innerHTML = `<span class="preset-name">${p.name}</span>`;
-      el.addEventListener('click', () => selectPreset(idx));
+      el.className = 'preset-item active preset-switch';
+      el.innerHTML = `<span class="preset-name">当前: ${cur.name}</span><span class="preset-switch-hint">点击切换</span>`;
+      el.addEventListener('click', () => {
+        activePresetIdx = -1;
+        renderPresetControls();
+      });
       list.appendChild(el);
-    });
+    } else {
+      PRESETS.forEach((p, idx) => {
+        const el = document.createElement('button');
+        el.className = 'preset-item' + (idx === activePresetIdx ? ' active' : '');
+        el.innerHTML = `<span class="preset-name">${p.name}</span>`;
+        el.addEventListener('click', () => selectPreset(idx));
+        list.appendChild(el);
+      });
+    }
     // 滑块控制区：常驻在预设列表下方（独立容器），选中预设时显示
     const ctrlBox = $('preset-controls');
     ctrlBox.innerHTML = '';

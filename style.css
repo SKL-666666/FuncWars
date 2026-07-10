@@ -322,6 +322,16 @@ html, body {
   box-shadow: 0 0 8px rgba(0,255,255,0.2);
 }
 .preset-item.active .preset-name { color: #5bb; }
+.preset-switch {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.preset-switch-hint {
+  color: #5bb;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
 .preset-controls {
   display: flex;
   flex-direction: column;

@@ -121,32 +121,63 @@
     return { mode: 'y', compiled: parsed.compiled, tMin: HF.BOARD_MIN, tMax: HF.BOARD_MAX };
   };
 
-  // ===== 锚点距离校验（统一参数化） =====
+  // ===== 锚点距离校验（统一参数化，粗采样+局部精细搜索） =====
   HF.anchorDistance = function (parsed, x0, y0) {
     const curve = HF.makeCurve(parsed);
     if (!curve) return Infinity;
-    let best = Infinity;
-    const step = (curve.tMax - curve.tMin) / 2000;
-    for (let t = curve.tMin; t <= curve.tMax + 1e-9; t += step) {
+    // 粗采样找最近区间
+    let best = Infinity, bestT = curve.tMin;
+    const N = 2000;
+    const step = (curve.tMax - curve.tMin) / N;
+    for (let i = 0; i <= N; i++) {
+      const t = curve.tMin + i * step;
       const p = evalCurve(curve, t);
       if (!p) continue;
       const d = Math.hypot(p.x - x0, p.y - y0);
-      if (d < best) best = d;
+      if (d < best) { best = d; bestT = t; }
+    }
+    // 局部精细搜索：在 bestT ± step 范围内二分细化
+    let lo = bestT - step, hi = bestT + step;
+    if (lo < curve.tMin) lo = curve.tMin;
+    if (hi > curve.tMax) hi = curve.tMax;
+    for (let iter = 0; iter < 40; iter++) {
+      const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+      const p1 = evalCurve(curve, m1), p2 = evalCurve(curve, m2);
+      if (!p1 && !p2) break;
+      const d1 = p1 ? Math.hypot(p1.x - x0, p1.y - y0) : Infinity;
+      const d2 = p2 ? Math.hypot(p2.x - x0, p2.y - y0) : Infinity;
+      if (d1 < d2) hi = m2; else lo = m1;
+      best = Math.min(best, d1, d2);
     }
     return best;
   };
 
-  // 垂足 Q（统一参数化）
+  // 垂足 Q（统一参数化，粗采样+局部精细搜索）
   HF.footPoint = function (parsed, x0, y0) {
     const curve = HF.makeCurve(parsed);
     if (!curve) return null;
     let best = Infinity, bt = curve.tMin, bx = 0, by = 0;
-    const step = (curve.tMax - curve.tMin) / 2000;
-    for (let t = curve.tMin; t <= curve.tMax + 1e-9; t += step) {
+    const N = 2000;
+    const step = (curve.tMax - curve.tMin) / N;
+    for (let i = 0; i <= N; i++) {
+      const t = curve.tMin + i * step;
       const p = evalCurve(curve, t);
       if (!p) continue;
       const d = Math.hypot(p.x - x0, p.y - y0);
       if (d < best) { best = d; bt = t; bx = p.x; by = p.y; }
+    }
+    // 局部精细搜索
+    let lo = bt - step, hi = bt + step;
+    if (lo < curve.tMin) lo = curve.tMin;
+    if (hi > curve.tMax) hi = curve.tMax;
+    for (let iter = 0; iter < 40; iter++) {
+      const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3;
+      const p1 = evalCurve(curve, m1), p2 = evalCurve(curve, m2);
+      if (!p1 && !p2) break;
+      const d1 = p1 ? Math.hypot(p1.x - x0, p1.y - y0) : Infinity;
+      const d2 = p2 ? Math.hypot(p2.x - x0, p2.y - y0) : Infinity;
+      if (d1 < d2) { hi = m2; if (d1 < best) { best = d1; bt = m1; bx = p1.x; by = p1.y; } }
+      else { lo = m1; if (d2 < best) { best = d2; bt = m2; bx = p2.x; by = p2.y; } }
     }
     if (best === Infinity) return null;
     return { x: bx, y: by, t: bt };
