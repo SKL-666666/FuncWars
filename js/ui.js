@@ -185,6 +185,17 @@
     }
   }
 
+  // 判断是否为强大函数（三角函数、参数化曲线等覆盖面广的）
+  function isPowerfulFunction(presetIdx, label, desc) {
+    if (presetIdx >= 0) {
+      const name = PRESETS[presetIdx].name;
+      return HF.POWERFUL_PRESETS.some(kw => name.indexOf(kw) >= 0);
+    }
+    // 手动输入：检查表达式是否含三角/双曲/参数化
+    const expr = (desc && desc.expr) || label || '';
+    return /sin|cos|tan|tanh/.test(expr) || desc.kind === 'param';
+  }
+
   // 根据预设描述构造 curve 对象
   function buildCurve(desc) {
     if (desc.kind === 'explicit') {
@@ -436,11 +447,22 @@
     st.mandatoryBlocks = { A: null, B: null };
   }
 
-  // 困难模式：当前回合玩家刷新强制方块
+  // 困难模式：当前回合刷新强制方块（A/B交替，由全局turnCount决定）
   function refreshMandatoryBlockForCurrentTurn() {
     const st = HF.state;
     if (st.difficulty !== 2) return;
-    HF.refreshMandatoryBlockIfNeeded(st.turn);
+    // 联机模式：只有 A 生成方块并广播，B 接收
+    if (st.mode === 'net') {
+      if (st.myRole === 'A') {
+        HF.refreshMandatoryBlockIfNeeded();
+        const active = st.turnCount % 2 === 1 ? 'A' : 'B';
+        const blk = st.mandatoryBlocks[active];
+        if (blk) HF.net.sendAction({ type: 'mandatory_block', player: active, x: blk.x, y: blk.y });
+      }
+      // B 端等待接收，不主动生成
+    } else {
+      HF.refreshMandatoryBlockIfNeeded();
+    }
   }
 
   // ===== 联机模式（PeerJS P2P）=====
@@ -565,6 +587,13 @@
       return;
     }
     if (st.phase !== 'play') return;
+    // 联机同步强制方块：A 生成广播给 B
+    if (action.type === 'mandatory_block') {
+      st.mandatoryBlocks.A = null;
+      st.mandatoryBlocks.B = null;
+      st.mandatoryBlocks[action.player] = { x: action.x, y: action.y };
+      return;
+    }
     // 强制方块失败通知：对手激光未经过方块，对手判负
     if (action.type === 'mandatory_fail') {
       st.busy = false;
@@ -875,8 +904,16 @@
     const dist = HF.anchorDistance(curve, anchor.x, anchor.y);
     if (dist >= 0.5) { flashHint(`锚点到曲线距离 ${dist.toFixed(2)} ≥ 0.5，发射无效`); return; }
 
+    // 强大函数次数限制：三角/参数化曲线每回合最多2次，简单函数无限制
+    const isPowerful = isPowerfulFunction(activePresetIdx, label, desc);
+    if (isPowerful && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_TURN) {
+      flashHint(`强大函数本回合已用 ${HF.POWERFUL_MAX_PER_TURN} 次，请使用简单函数或移动/陷阱`);
+      return;
+    }
+
     st.busy = true;
     st.previewLaser = null;
+    if (isPowerful) st.powerfulLaserUsed++;
     // 联机模式广播（包含曲线描述供对手重放）
     if (st.mode === 'net') {
       HF.net.sendAction({ type: 'laser', pieceId: anchor.id, desc: desc });
@@ -1020,6 +1057,8 @@
     const anchor = st.players.B.pieces.find(p => p.id === action.pieceId && p.alive);
     if (!anchor) { nextTurnHandoff(); return; }
     st.busy = true;
+    // 强大函数计数
+    if (action.label && /sin|cos|tan|tanh/.test(action.label)) st.powerfulLaserUsed++;
     // 记录 AI 用过的曲线标签，避免重复
     if (action.label && HF.ai && HF.ai.recentLasers) {
       HF.ai.recentLasers.push(action.label);

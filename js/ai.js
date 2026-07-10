@@ -8,15 +8,16 @@
   // 难度：0=简单 1=普通 2=困难
   HF.ai.difficulty = 1;
 
-  // ===== AI 布阵：王放死角，护卫声东击西分散进攻 =====
+  // ===== AI 布阵：王放死角，护卫声东击西分散进攻，禁止中线，强随机性 =====
   HF.ai.doSetup = function (player) {
     const st = HF.state;
     const minY = player === 'A' ? HF.SETUP_A_MIN_Y : HF.SETUP_B_MIN_Y;
     const maxY = player === 'A' ? HF.SETUP_A_MAX_Y : HF.SETUP_B_MAX_Y;
     const occupied = new Set();
     const key = (x, y) => x + ',' + y;
-    const inZone = (x, y) => y >= minY && y <= maxY && HF.inBoard(x, y);
-    // 共享中线：避开敌方已放置的棋子
+    // 禁止中线 y=0；布阵区不含中线时正常，含中线则排除
+    const inZone = (x, y) => y >= minY && y <= maxY && y !== 0 && HF.inBoard(x, y);
+    // 避开敌方已放置的棋子
     const enemy = player === 'A' ? 'B' : 'A';
     for (const pc of st.players[enemy].pieces) occupied.add(key(pc.x, pc.y));
     const placed = [];
@@ -24,15 +25,13 @@
     // 评估格点对王的隐蔽性：死角最高 + 障碍物遮挡 + 靠己方底线
     function concealment(x, y) {
       let score = 0;
-      // 死角（靠边 + 靠底线）最高分
       const isEdgeX = Math.abs(x) >= HF.BOARD_MAX - 1;
       const isBackY = player === 'A' ? (y <= minY + 0.5) : (y >= maxY - 0.5);
-      if (isEdgeX && isBackY) score += 10;        // 真正的死角
-      else if (isEdgeX || isBackY) score += 4;    // 靠边
-      score += Math.abs(x) * 0.4;                  // 越靠边越好
-      const edgeBonus = player === 'A' ? -y : y;   // 靠近己方底线
+      if (isEdgeX && isBackY) score += 10;
+      else if (isEdgeX || isBackY) score += 4;
+      score += Math.abs(x) * 0.4;
+      const edgeBonus = player === 'A' ? -y : y;
       score += edgeBonus * 0.6;
-      // 障碍物近距遮挡（0.5~3 格内最佳）
       for (const ob of st.obstacles) {
         const ocx = (ob.x1 + ob.x2) / 2, ocy = (ob.y1 + ob.y2) / 2;
         const d = Math.hypot(ocx - x, ocy - y);
@@ -42,15 +41,23 @@
       return score;
     }
 
-    // 王：选隐蔽性最高的格点（死角优先）
-    let kingPos = null, kingScore = -Infinity;
+    // 从候选中按分数取前 K 个，再随机选一个（增加随机性，避免每局相同）
+    function pickFromCandidates(candidates, topK) {
+      candidates.sort((a, b) => b.score - a.score);
+      const k = Math.min(topK, candidates.length);
+      return candidates[Math.floor(Math.random() * k)];
+    }
+
+    // 王：收集所有候选，取前4随机选
+    const kingCands = [];
     for (let x = HF.BOARD_MIN; x <= HF.BOARD_MAX; x++) {
       for (let y = minY; y <= maxY; y++) {
         if (!inZone(x, y)) continue;
-        const s = concealment(x, y) + Math.random() * 0.2;
-        if (s > kingScore) { kingScore = s; kingPos = { x, y }; }
+        kingCands.push({ x, y, score: concealment(x, y) + Math.random() * 0.5 });
       }
     }
+    const kingPick = pickFromCandidates(kingCands, 4);
+    const kingPos = { x: kingPick.x, y: kingPick.y };
     placed.push({ x: kingPos.x, y: kingPos.y, type: 'king' });
     occupied.add(key(kingPos.x, kingPos.y));
 
@@ -61,22 +68,19 @@
       return m;
     }
     for (let i = 0; i < HF.MAX_GUARDS; i++) {
-      let best = null, bestScore = -Infinity;
+      const guardCands = [];
       for (let x = HF.BOARD_MIN; x <= HF.BOARD_MAX; x++) {
         for (let y = minY; y <= maxY; y++) {
           if (!inZone(x, y) || occupied.has(key(x, y))) continue;
           const dKing = Math.hypot(x - kingPos.x, y - kingPos.y);
           const dNear = distToNearest(x, y);
-          let score = dNear * 1.5;  // 分散
+          let score = dNear * 1.5;
           if (i === 0) {
-            // 第1护卫：贴王防御（距离1.5~2.5）
             if (dKing >= 1.5 && dKing <= 2.5) score += 6;
           } else {
-            // 后续护卫：向敌方推进（声东击西）
-            const enemyDir = player === 'A' ? y : -y;  // 越靠近敌方越好
+            const enemyDir = player === 'A' ? y : -y;
             score += enemyDir * 1.0;
-            if (dKing >= 3) score += 3;  // 远离王
-            // 避免与已有护卫在同一线（防一条曲线全灭）
+            if (dKing >= 3) score += 3;
             for (const p of placed) {
               if (p.type === 'guard') {
                 if (p.x === x) score -= 4;
@@ -84,13 +88,14 @@
               }
             }
           }
-          score += Math.random() * 0.4;
-          if (score > bestScore) { bestScore = score; best = { x, y }; }
+          score += Math.random() * 1.2;  // 增大随机性
+          guardCands.push({ x, y, score });
         }
       }
-      if (best) {
-        placed.push({ x: best.x, y: best.y, type: 'guard' });
-        occupied.add(key(best.x, best.y));
+      const pick = pickFromCandidates(guardCands, 3);
+      if (pick) {
+        placed.push({ x: pick.x, y: pick.y, type: 'guard' });
+        occupied.add(key(pick.x, pick.y));
       }
     }
 
@@ -167,7 +172,7 @@
 
   // ===== 期望收益评估（公平，不窥探敌方真实位置） =====
   // 基于概率图估算激光命中敌方的期望得分；己方棋子用真实位置（避免误伤）
-  // 共振加成：命中点附近 1 格内若有其他高概率格点，额外加分
+  // 共振加成 + 未探索区域奖励 + 王命中权重
   function expectedLaserScore(curve, anchor, anchorId, myPlayer, prob) {
     const st = HF.state;
     const myPieces = st.players[myPlayer].pieces.filter(p => p.alive && p.id !== anchorId);
@@ -179,7 +184,7 @@
       for (let i = 0; i < result.points.length - 1; i++) {
         const d = HF.math.distPointToSegment({ x: pc.x, y: pc.y }, result.points[i], result.points[i + 1]);
         if (d < 0.5) {
-          score -= pc.type === 'king' ? 1000 : 12;
+          score -= pc.type === 'king' ? 1000 : 15;
           break;
         }
       }
@@ -187,6 +192,12 @@
     // 2. 期望敌方命中：曲线上每点找最近格点，累加概率
     const covered = new Set();
     const hitCells = [];
+    // 收集己方历史轨迹覆盖的格点（打过的不加分）
+    const explored = new Set();
+    for (const tr of st.trails) {
+      if (tr.player !== myPlayer) continue;
+      for (const pt of tr.points) explored.add(Math.round(pt.x) + ',' + Math.round(pt.y));
+    }
     for (const pt of result.points) {
       const gx = Math.round(pt.x), gy = Math.round(pt.y);
       const k = gx + ',' + gy;
@@ -194,12 +205,15 @@
       const p = prob.grid.get(k);
       if (p && p > 0) {
         const kingChance = 1 / prob.aliveCount;
-        score += p * (8 + kingChance * 80);
+        let cellScore = p * (10 + kingChance * 100);  // 提高王命中权重
+        // 未探索区域额外奖励（信息收集）
+        if (!explored.has(k)) cellScore *= 1.3;
+        score += cellScore;
         covered.add(k);
         hitCells.push({ x: gx, y: gy, prob: p });
       }
     }
-    // 3. 共振连锁加成：每个命中格点 RESONANCE_RADIUS 内有其他高概率格点 → 额外收益
+    // 3. 共振连锁加成
     for (const hc of hitCells) {
       let clusterBonus = 0;
       for (const [k, p] of prob.grid) {
@@ -265,6 +279,12 @@
     HF.ai.recentLasers.push(label);
     if (HF.ai.recentLasers.length > MAX_RECENT) HF.ai.recentLasers.shift();
   }
+  // 判断曲线描述是否为强大函数（三角/参数化）
+  function isPowerfulDesc(desc) {
+    if (desc.kind === 'param') return true;
+    const expr = desc.expr || '';
+    return /sin|cos|tan|tanh/.test(expr);
+  }
 
   function fmt(v) { return Math.abs(v) < 1e-9 ? '0' : (Math.round(v * 1000) / 1000).toString(); }
 
@@ -320,9 +340,45 @@
     let bestAction = null;
     let bestScore = -Infinity;
 
-    // === 防御检查：王危险高时优先移动王 ===
+    // === 防御检查：王危险高时优先用护卫挡枪，其次移王 ===
     const danger = kingDanger(myPlayer);
     if (danger >= 2 && HF.ai.difficulty >= 1) {
+      // 策略A：移护卫到王与敌方最近轨迹点之间（挡枪）
+      const enemyTrails = st.trails.filter(t => t.player !== myPlayer);
+      if (enemyTrails.length) {
+        const lastTrail = enemyTrails[enemyTrails.length - 1];
+        // 找敌方轨迹离王最近的点
+        let nearestEnemyPt = null, ned = Infinity;
+        for (const pt of lastTrail.points) {
+          const d = Math.hypot(pt.x - myKing.x, pt.y - myKing.y);
+          if (d < ned) { ned = d; nearestEnemyPt = pt; }
+        }
+        if (nearestEnemyPt) {
+          // 挡枪点：王与敌方点连线中点附近
+          const bx = Math.round((myKing.x + nearestEnemyPt.x) / 2);
+          const by = Math.round((myKing.y + nearestEnemyPt.y) / 2);
+          // 找能移到挡枪点的护卫
+          let bestBlocker = null, bestBlockScore = -Infinity;
+          for (const guard of myPieces.filter(p => p.type === 'guard')) {
+            for (const dir of HF.DIRECTIONS) {
+              for (const steps of [1, 2]) {
+                const nx = guard.x + dir.dx * steps, ny = guard.y + dir.dy * steps;
+                if (!HF.inBoard(nx, ny)) continue;
+                if (myPieces.some(p => p.id !== guard.id && p.x === nx && p.y === ny)) continue;
+                const distToBlock = Math.hypot(nx - bx, ny - by);
+                let s = -distToBlock * 3;
+                if (distToBlock < 0.5) s += 8;  // 成功挡枪
+                s += Math.random() * 0.3;
+                if (s > bestBlockScore) { bestBlockScore = s; bestBlocker = { pieceId: guard.id, dx: dir.dx * steps, dy: dir.dy * steps }; }
+              }
+            }
+          }
+          if (bestBlocker && bestBlockScore > 4) {
+            return { type: 'move', pieceId: bestBlocker.pieceId, dx: bestBlocker.dx, dy: bestBlocker.dy };
+          }
+        }
+      }
+      // 策略B：移王逃跑
       let bestKingMove = null, bestKingScore = -Infinity;
       for (const dir of HF.DIRECTIONS) {
         for (const steps of [1, 2]) {
@@ -369,6 +425,8 @@
         for (const desc of descs) {
           const r = buildCurveSimple(desc);
           if (!r.ok) continue;
+          // 强大函数次数限制：超过本回合上限则跳过
+          if (isPowerfulDesc(desc) && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_TURN) continue;
           const dist = HF.anchorDistance(r.curve, anchor.x, anchor.y);
           if (dist >= 0.5) continue;
           // 生成激光轨迹用于评估

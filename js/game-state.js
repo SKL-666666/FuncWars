@@ -56,8 +56,12 @@
       busy: false,             // 动作动画进行中，禁止操作
       previewLaser: null,      // 预览激光轨迹（未发射，实时渲染）
       resonanceChain: null,    // 共振连锁动画 {chains, startTime}
+      powerfulLaserUsed: 0,    // 本回合已用强大函数次数
     };
   }
+  // 强大函数类型：三角函数、椭圆、玫瑰线、螺旋线、心形线、双纽线（覆盖面广）
+  HF.POWERFUL_PRESETS = ['sin', 'cos', 'tan', 'tanh', '椭圆', '玫瑰线', '螺旋线', '心形线', '双纽线', '正弦+余弦'];
+  HF.POWERFUL_MAX_PER_TURN = 2;
 
   HF.newGame = function () {
     HF.state = freshState();
@@ -301,6 +305,7 @@
     st.actionMode = 'move';
     st.currentLaser = null;
     st.resonanceChain = null;
+    st.powerfulLaserUsed = 0;  // 新回合重置强大函数计数
   };
 
   // 工具：获取当前玩家存活棋子
@@ -313,22 +318,17 @@
     return x >= HF.BOARD_MIN && x <= HF.BOARD_MAX && y >= HF.BOARD_MIN && y <= HF.BOARD_MAX;
   };
 
-  // ===== 困难模式：强制方块 =====
-  // 为指定玩家生成一个新的强制方块（随机格点，不在棋子/障碍上，与对方方块不同）
+  // ===== 困难模式：强制方块（A/B 交替，全局回合制） =====
+  // 规则：全局 turnCount 奇数→A需击中方块，偶数→B需击中方块；每回合开始生成新方块（一次性）
+  // mandatoryBlocks.player = {x,y} 表示该玩家本回合需击中的方块；null 表示无要求
   HF.generateMandatoryBlock = function (player) {
     const st = HF.state;
-    const enemy = player === 'A' ? 'B' : 'A';
-    const enemyBlock = st.mandatoryBlocks[enemy];
     const allPieces = st.players.A.pieces.concat(st.players.B.pieces);
     for (let attempt = 0; attempt < 200; attempt++) {
       const x = HF.BOARD_MIN + Math.floor(Math.random() * (HF.BOARD_MAX - HF.BOARD_MIN + 1));
       const y = HF.BOARD_MIN + Math.floor(Math.random() * (HF.BOARD_MAX - HF.BOARD_MIN + 1));
       if (!HF.inBoard(x, y)) continue;
       if (allPieces.some(p => p.alive && p.x === x && p.y === y)) continue;
-      // 避开棋子相邻格（给玩家留操作空间）
-      if (allPieces.some(p => p.alive && Math.abs(p.x - x) + Math.abs(p.y - y) === 0)) continue;
-      // 与敌方方块位置不同
-      if (enemyBlock && enemyBlock.x === x && enemyBlock.y === y) continue;
       st.mandatoryBlocks[player] = { x, y };
       return { x, y };
     }
@@ -337,21 +337,18 @@
   };
 
   // 检查函数曲线是否经过指定玩家的强制方块（距离 < 0.5 视为经过）
-  // 传入曲线对象（非激光截断点），判定完整函数曲线
+  // 传入曲线对象，判定完整函数曲线（非激光截断点）
   HF.checkMandatoryBlock = function (curve, player) {
     const st = HF.state;
     const blk = st.mandatoryBlocks[player];
     if (!blk) return true; // 无方块要求则通过
-    // 用 anchorDistance 同款采样：完整曲线找最近点
     if (!curve) return false;
-    // 若传入的是 points 数组（兼容旧调用），直接用
     if (Array.isArray(curve)) {
       for (const pt of curve) {
         if (Math.hypot(pt.x - blk.x, pt.y - blk.y) < 0.5) return true;
       }
       return false;
     }
-    // 曲线对象：采样完整 t 范围
     const tMin = curve.tMin, tMax = curve.tMax;
     const N = 2000;
     const step = (tMax - tMin) / N;
@@ -378,17 +375,16 @@
     return true;
   };
 
-  // 回合开始时刷新强制方块（困难模式：无限制1回合+打方块1回合交替）
-  HF.refreshMandatoryBlockIfNeeded = function (player) {
+  // 回合开始时刷新强制方块（困难模式：A/B 交替，全局 turnCount 驱动）
+  // 奇数回合→A需击中（B无限制）；偶数回合→B需击中（A无限制）
+  HF.refreshMandatoryBlockIfNeeded = function () {
     const st = HF.state;
     if (st.difficulty !== 2) return;
-    st.playerTurnCount[player]++;
-    // 奇数回合：自由（无方块，旧方块消失）；偶数回合：生成新方块
-    if (st.playerTurnCount[player] % 2 === 0) {
-      HF.generateMandatoryBlock(player);
-    } else {
-      st.mandatoryBlocks[player] = null;
-    }
+    // 清空双方，只给当前回合玩家生成
+    st.mandatoryBlocks.A = null;
+    st.mandatoryBlocks.B = null;
+    const active = st.turnCount % 2 === 1 ? 'A' : 'B';
+    HF.generateMandatoryBlock(active);
   };
 
   // 初始默认状态（标题屏阶段，避免渲染循环访问 undefined；点开始时 newGame 重置）
