@@ -62,6 +62,7 @@
   }
   // 强大函数类型：三角函数、椭圆、玫瑰线、螺旋线、心形线、双纽线（覆盖面广）
   HF.POWERFUL_PRESETS = ['sin', 'cos', 'tan', 'tanh', '椭圆', '玫瑰线', '螺旋线', '心形线', '双纽线', '正弦+余弦'];
+  HF.POWERFUL_MAX_CREDITS = 1;  // 强力函数额度上限
 
   HF.newGame = function () {
     HF.state = freshState();
@@ -176,6 +177,13 @@
       return { ok: false, msg: '目标格有己方棋子' };
 
     const enemy = player === 'A' ? 'B' : 'A';
+    // 2步移动：检查中间格是否被阻挡（棋子或陷阱）
+    if (Math.max(adx, ady) === 2) {
+      const midX = mine.x + Math.sign(dx), midY = mine.y + Math.sign(dy);
+      const midBlocked = st.players.A.pieces.some(p => p.alive && p.x === midX && p.y === midY)
+        || st.players.B.pieces.some(p => p.alive && p.x === midX && p.y === midY);
+      if (midBlocked) return { ok: false, msg: '中间格有棋子阻挡' };
+    }
     const enemyPiece = st.players[enemy].pieces.find(p => p.alive && p.x === nx && p.y === ny);
     // 陷阱检测：敌方陷阱在目标格
     const enemyTraps = st.players[enemy].traps;
@@ -260,6 +268,7 @@
   // 联机模式下，若对方棋子未同步（列表为空），跳过对方王存活判定，避免误判
   HF.checkWin = function (context) {
     const st = HF.state;
+    if (st.phase !== 'play') return false;  // 阶段保护：仅对战阶段判定
     const kingA = st.players.A.pieces.find(p => p.type === 'king' && p.alive);
     const kingB = st.players.B.pieces.find(p => p.type === 'king' && p.alive);
     const aAlive = !!kingA, bAlive = !!kingB;

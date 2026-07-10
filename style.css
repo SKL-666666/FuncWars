@@ -163,47 +163,76 @@ html, body {
   #app {
     height: 100dvh;
     overflow: hidden;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
   .game-area {
     padding: 4px;
     gap: 4px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
   .topbar {
     gap: 6px;
     padding: 4px 6px;
     min-height: 34px;
     max-width: 100%;
+    flex-wrap: wrap;
   }
-  .info { font-size: 11px; letter-spacing: 0.3px; }
+  .info {
+    font-size: 11px;
+    letter-spacing: 0.3px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .chip { padding: 4px 10px; font-size: 12px; }
   .btn { padding: 6px 14px; font-size: 13px; }
-  /* 纵向堆叠：棋盘在上，面板在下可折叠 */
+  /* 纵向堆叠：棋盘在上，面板在下可滚动 */
   .play-layout {
     flex-direction: column;
     gap: 6px;
     max-width: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
   .play-layout .board-wrap {
-    flex: 1 1 60%;
+    flex: 1 1 55%;
     min-height: 0;
   }
   .laser-panel {
     width: 100%;
     flex: 0 0 auto;
-    max-height: 40vh;
+    max-height: 42vh;
     padding: 8px;
-    gap: 6px;
+    gap: 4px;
     border-radius: 8px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .laser-panel input {
     font-size: 16px;  /* 防 iOS 缩放 */
     padding: 8px 10px;
   }
   .laser-panel .btn { padding: 8px; font-size: 14px; }
-  .preset-list { max-height: 120px; }
+  /* 取消 preset-list 内嵌滚动，由 laser-panel 统一管理（避免嵌套滚动地狱） */
+  .preset-list {
+    max-height: none;
+    overflow-y: visible;
+  }
   .preset-item { padding: 8px 10px; font-size: 13px; }
   .preset-item .preset-name { font-size: 10px; }
-  .preset-controls { padding: 8px; }
+  /* preset-controls 允许压缩，限制最大高度 */
+  .preset-controls {
+    padding: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    flex-shrink: 1;
+  }
   .slider-row { gap: 6px; font-size: 11px; }
   .slider-row label { width: 14px; }
   .slider-row input[type="range"] {
@@ -223,7 +252,15 @@ html, body {
   .net-row input { font-size: 16px; }  /* 防 iOS 缩放 */
   .handoff-text { font-size: 18px; letter-spacing: 2px; }
   .result-title { font-size: 32px; letter-spacing: 4px; }
-  .action-msg { font-size: 12px; padding: 8px 16px; bottom: 12px; }
+  /* action-msg 改为中部显示，避免遮挡底部滑块 */
+  .action-msg {
+    font-size: 12px;
+    padding: 8px 16px;
+    bottom: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
 }
 
 /* ===== 手机横屏 ===== */

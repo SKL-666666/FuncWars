@@ -137,6 +137,8 @@
 
     conn.on('error', (err) => {
       setStatus('连接错误: ' + (err.message || err));
+      HF.net.connected = false;
+      if (HF.net.onLeave) HF.net.onLeave();
     });
   }
 

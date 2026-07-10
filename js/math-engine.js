@@ -113,6 +113,10 @@
   // 把 parseFunction 结果或 parseParametric 结果包装成统一 curve
   HF.makeCurve = function (parsed) {
     if (parsed.mode) return parsed; // 已是 curve
+    // 参数化曲线（parseParametric 返回 {ok, cx, cy, tMin, tMax}）
+    if (parsed.cx && parsed.cy) {
+      return { mode: 'param', cx: parsed.cx, cy: parsed.cy, tMin: parsed.tMin, tMax: parsed.tMax };
+    }
     if (parsed.type === 'x') {
       const c = parseConst(parsed.raw, 'x');
       if (c === null) return null;

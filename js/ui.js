@@ -146,7 +146,7 @@
       el.innerHTML = `<span class="preset-name">当前: ${cur.name}</span><span class="preset-switch-hint">点击切换</span>`;
       el.addEventListener('click', () => {
         activePresetIdx = -1;
-        st.previewLaser = null;
+        HF.state.previewLaser = null;
         renderPresetControls();
       });
       list.appendChild(el);
@@ -617,6 +617,17 @@
       showResult();
       return;
     }
+    // 胜负结果通知：对手已判定胜负
+    if (action.type === 'game_over') {
+      st.busy = false;
+      st.currentLaser = null;
+      st.previewLaser = null;
+      st.winner = action.winner;
+      st.winReason = action.reason;
+      st.phase = 'result';
+      showResult();
+      return;
+    }
     // 重放对手动作
     replayOpponentAction(action);
   }
@@ -649,8 +660,7 @@
       setTimeout(() => {
         st.busy = false;
         clearMsg();
-        const ctx = res.collision ? { cause: 'collision' } : (res.trapHit ? { cause: 'trap' } : null);
-        if (HF.checkWin(ctx)) { showResult(); return; }
+        // 联机模式：对手端只重放不判定胜负
         nextTurnHandoffNet();
       }, 1500);
     } else if (action.type === 'trap') {
@@ -668,7 +678,7 @@
       }
     } else if (action.type === 'skip') {
       st.busy = true;
-      st.powerfulLaserCredits[st.turn]++;
+      st.powerfulLaserCredits[st.turn] = Math.min(HF.POWERFUL_MAX_CREDITS, st.powerfulLaserCredits[st.turn] + 1);
       showMsg('对手跳过回合 · 强力额度+1');
       setTimeout(() => {
         st.busy = false;
@@ -711,8 +721,7 @@
         st.resonanceChain = null;
         st.busy = false;
         clearMsg();
-        const ctx = { cause: 'laser', shooter: st.turn };
-        if (HF.checkWin(ctx)) { showResult(); return; }
+        // 联机模式：对手端只重放不判定胜负
         nextTurnHandoffNet();
       }, animTime);
     }
@@ -857,8 +866,15 @@
   }
 
   // ===== 执行移动 =====
+  // 困难模式：有强制方块时，必须发射激光经过方块，不得移动/陷阱/跳过
+  function hasUnfulfilledBlock() {
+    const st = HF.state;
+    return st.difficulty === 2 && st.mandatoryBlocks[st.turn];
+  }
+
   function executeMove(piece, dx, dy) {
     const st = HF.state;
+    if (hasUnfulfilledBlock()) { flashHint('本回合必须发射激光经过强制方块'); return; }
     st.busy = true;
     const res = HF.movePiece(st.turn, piece.id, dx, dy);
     if (!res.ok) { flashHint(res.msg); st.busy = false; return; }
@@ -890,10 +906,11 @@
     const st = HF.state;
     if (st.busy) return;
     if (st.phase !== 'play') return;
+    if (hasUnfulfilledBlock()) { flashHint('本回合必须发射激光经过强制方块'); return; }
     st.busy = true;
     st.selectedPieceId = null;
     st.previewLaser = null;
-    st.powerfulLaserCredits[st.turn]++;
+    st.powerfulLaserCredits[st.turn] = Math.min(HF.POWERFUL_MAX_CREDITS, st.powerfulLaserCredits[st.turn] + 1);
     // 联机模式广播
     if (st.mode === 'net') {
       HF.net.sendAction({ type: 'skip' });
@@ -910,6 +927,7 @@
   // ===== 执行埋陷阱 =====
   function executeTrap(piece, x, y) {
     const st = HF.state;
+    if (hasUnfulfilledBlock()) { flashHint('本回合必须发射激光经过强制方块'); return; }
     const res = HF.placeTrap(st.turn, x, y);
     if (!res.ok) { flashHint(res.msg); return; }
     st.busy = true;
@@ -1018,11 +1036,17 @@
       clearMsg();
       if (!blockPassed) {
         HF.mandatoryFail(st.turn);
+        if (st.mode === 'net') HF.net.sendAction({ type: 'mandatory_fail', loser: st.turn });
         showResult();
         return;
       }
       const ctx = { cause: 'laser', shooter: st.turn };
-      if (HF.checkWin(ctx)) { showResult(); return; }
+      if (HF.checkWin(ctx)) {
+        // 联机模式：通知对手胜负结果
+        if (st.mode === 'net') HF.net.sendAction({ type: 'game_over', winner: st.winner, reason: st.winReason });
+        showResult();
+        return;
+      }
       if (st.mode === 'net') nextTurnHandoffNet();
       else nextTurnHandoff();
     }, animTime);
@@ -1077,7 +1101,7 @@
   function executeAISkip() {
     const st = HF.state;
     st.busy = true;
-    st.powerfulLaserCredits[st.turn]++;
+    st.powerfulLaserCredits[st.turn] = Math.min(HF.POWERFUL_MAX_CREDITS, st.powerfulLaserCredits[st.turn] + 1);
     showMsg(`AI 跳过回合 · 强力额度+1（当前 ${st.powerfulLaserCredits[st.turn]}）`);
     setTimeout(() => {
       st.busy = false;
