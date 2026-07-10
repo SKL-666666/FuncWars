@@ -885,8 +885,8 @@
     const result = HF.generateLaser(curve, { x: anchor.x, y: anchor.y }, allPieces, anchor.id);
     st.currentLaser = { points: result.points, hits: result.hits, startTime: performance.now() };
 
-    // 困难模式：检查强制方块
-    const blockPassed = HF.checkMandatoryBlock(result.points, st.turn);
+    // 困难模式：检查强制方块（用完整曲线，非激光截断点）
+    const blockPassed = HF.checkMandatoryBlock(curve, st.turn);
     // 联机模式：失败时立即通知对手
     if (!blockPassed && st.mode === 'net') {
       HF.net.sendAction({ type: 'mandatory_fail', loser: st.turn });
@@ -1028,8 +1028,8 @@
     const allPieces = st.players.A.pieces.concat(st.players.B.pieces);
     const result = HF.generateLaser(action.curve, { x: anchor.x, y: anchor.y }, allPieces, anchor.id);
     st.currentLaser = { points: result.points, hits: result.hits, startTime: performance.now() };
-    // 困难模式：检查 AI 强制方块
-    const blockPassed = HF.checkMandatoryBlock(result.points, 'B');
+    // 困难模式：检查 AI 强制方块（用完整曲线）
+    const blockPassed = HF.checkMandatoryBlock(action.curve, 'B');
     const killed = [];
     for (const h of result.hits) { h.piece.alive = false; killed.push(h.piece); }
     // 共振连锁

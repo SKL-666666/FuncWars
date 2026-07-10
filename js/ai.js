@@ -371,9 +371,10 @@
           if (!r.ok) continue;
           const dist = HF.anchorDistance(r.curve, anchor.x, anchor.y);
           if (dist >= 0.5) continue;
-          // 生成激光轨迹用于检查强制方块
+          // 生成激光轨迹用于评估
           const laserRes = HF.generateLaser(r.curve, { x: anchor.x, y: anchor.y }, [], anchor.id, true);
-          const passesBlock = myBlock ? HF.checkMandatoryBlock(laserRes.points, myPlayer) : true;
+          // 检查完整曲线是否经过强制方块（非激光截断点）
+          const passesBlock = myBlock ? HF.checkMandatoryBlock(r.curve, myPlayer) : true;
           // 困难模式：未经过强制方块的曲线大幅降分（发射即判负）
           let blockPenalty = 0;
           if (myBlock && !passesBlock) blockPenalty = 2000;

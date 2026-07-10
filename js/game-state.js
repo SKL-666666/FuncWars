@@ -336,13 +336,35 @@
     return { x: 0, y: 0 };
   };
 
-  // 检查激光曲线是否经过指定玩家的强制方块（距离 < 0.5 视为经过）
-  HF.checkMandatoryBlock = function (points, player) {
+  // 检查函数曲线是否经过指定玩家的强制方块（距离 < 0.5 视为经过）
+  // 传入曲线对象（非激光截断点），判定完整函数曲线
+  HF.checkMandatoryBlock = function (curve, player) {
     const st = HF.state;
     const blk = st.mandatoryBlocks[player];
     if (!blk) return true; // 无方块要求则通过
-    for (const pt of points) {
-      if (Math.hypot(pt.x - blk.x, pt.y - blk.y) < 0.5) return true;
+    // 用 anchorDistance 同款采样：完整曲线找最近点
+    if (!curve) return false;
+    // 若传入的是 points 数组（兼容旧调用），直接用
+    if (Array.isArray(curve)) {
+      for (const pt of curve) {
+        if (Math.hypot(pt.x - blk.x, pt.y - blk.y) < 0.5) return true;
+      }
+      return false;
+    }
+    // 曲线对象：采样完整 t 范围
+    const tMin = curve.tMin, tMax = curve.tMax;
+    const N = 2000;
+    const step = (tMax - tMin) / N;
+    for (let i = 0; i <= N; i++) {
+      const t = tMin + i * step;
+      let p = null;
+      try {
+        if (curve.mode === 'y') p = { x: t, y: curve.compiled.evaluate({ x: t }) };
+        else if (curve.mode === 'x') p = { x: curve.c, y: t };
+        else if (curve.mode === 'param') p = { x: curve.cx.evaluate({ t }), y: curve.cy.evaluate({ t }) };
+      } catch (e) { continue; }
+      if (!p || isNaN(p.x) || isNaN(p.y)) continue;
+      if (Math.hypot(p.x - blk.x, p.y - blk.y) < 0.5) return true;
     }
     return false;
   };
