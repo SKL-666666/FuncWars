@@ -460,7 +460,7 @@
           score += Math.random() * 0.5;
           if (score > bestScore) {
             bestScore = score;
-            bestAction = { type: 'laser', pieceId: anchor.id, curve: r.curve, label: r.label };
+            bestAction = { type: 'laser', pieceId: anchor.id, curve: r.curve, label: r.label, desc: desc };
           }
         }
       }

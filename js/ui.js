@@ -455,7 +455,6 @@
   function initMandatoryBlocks() {
     const st = HF.state;
     if (st.difficulty !== 2) return;
-    st.playerTurnCount = { A: 0, B: 0 };
     st.mandatoryBlocks = { A: null, B: null };
   }
 
@@ -1149,8 +1148,9 @@
     const anchor = st.players.B.pieces.find(p => p.id === action.pieceId && p.alive);
     if (!anchor) { nextTurnHandoff(); return; }
     st.busy = true;
-    // 强力函数消耗AI额度（统一用 isPowerfulFunction 判定）
-    if (isPowerfulFunction(-1, action.label || '', { kind: 'explicit', expr: action.label || '' })) {
+    // 强力函数消耗AI额度（用 desc 正确判断参数化曲线）
+    const aiDesc = action.desc || { kind: 'explicit', expr: action.label || '' };
+    if (isPowerfulFunction(-1, action.label || '', aiDesc)) {
       st.powerfulLaserCredits['B'] = Math.max(0, st.powerfulLaserCredits['B'] - 1);
     }
     // 记录 AI 用过的曲线标签，避免重复

@@ -314,6 +314,24 @@
         }
 
         if (hit && hitObs) {
+          // 反射前：检查入射段(prev→hit)是否有棋子被忽略（修复命中盲区）
+          if (!forPreview) {
+            let preHitPiece = null, preHitPoint = null, preHitDist = Infinity;
+            for (const pc of allPieces) {
+              if (!pc.alive) continue;
+              if (pc.id === anchorPieceId) continue;
+              const d = HF.math.distPointToSegment({ x: pc.x, y: pc.y }, prev, hit);
+              if (d < 0.5 && d < preHitDist) {
+                preHitDist = d; preHitPiece = pc;
+                preHitPoint = closestOnSegment({ x: pc.x, y: pc.y }, prev, hit);
+              }
+            }
+            if (preHitPiece) {
+              pts.push(preHitPoint);
+              hits.push({ piece: preHitPiece, point: preHitPoint });
+              return pts; // 入射段已命中棋子，无需反射
+            }
+          }
           pts.push({ x: hit.x, y: hit.y });
           const odx = hitObs.x2 - hitObs.x1, ody = hitObs.y2 - hitObs.y1;
           const olen = Math.hypot(odx, ody);

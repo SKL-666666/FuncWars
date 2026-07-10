@@ -48,7 +48,6 @@
       currentLaser: null,      // 本回合激光 {points, hits, startTime}
       explosions: [],          // {x,y,startTime}
       turnCount: 1,
-      playerTurnCount: { A: 0, B: 0 },  // 各玩家自己的回合数（困难模式方块刷新用）
       mandatoryBlocks: { A: null, B: null }, // 困难模式强制方块 {x,y}
       winner: null,            // null|'A'|'B'|'draw'
       winReason: '',
