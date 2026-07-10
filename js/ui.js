@@ -230,7 +230,10 @@
     const result = HF.generateLaser(r.curve, { x: anchor.x, y: anchor.y }, allPieces, anchor.id, true);
     st.previewLaser = { points: result.points };
     if (dist < 0.5) {
-      flashHint('预览：' + r.label + ' ✓');
+      const powerful = isPowerfulFunction(activePresetIdx, r.label, desc);
+      const remain = HF.POWERFUL_MAX_PER_TURN - st.powerfulLaserUsed;
+      const tag = powerful ? ` [强力 剩${remain}/${HF.POWERFUL_MAX_PER_TURN}]` : ' [简单 无限]';
+      flashHint('预览：' + r.label + ' ✓' + tag);
     } else {
       flashHint('预览：' + r.label + ' (距锚点' + dist.toFixed(2) + '，需<0.5)');
     }
@@ -289,6 +292,9 @@
         const b = st.mandatoryBlocks[st.turn];
         info += ` · 必经(${b.x},${b.y})`;
       }
+      // 强大函数剩余次数提示（三角/参数化曲线每回合限2次）
+      const remain = HF.POWERFUL_MAX_PER_TURN - st.powerfulLaserUsed;
+      info += ` · 强力${remain}/${HF.POWERFUL_MAX_PER_TURN}`;
       $('info').textContent = info;
       setActionMode(st.actionMode);
     }
