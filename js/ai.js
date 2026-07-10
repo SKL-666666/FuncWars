@@ -322,7 +322,7 @@
     return 0;
   }
 
-  // ===== AI 决策 =====
+  // ===== AI 决策（类人化：局势判断 → 战略选择 → 战术执行） =====
   HF.ai.decide = function (myPlayer) {
     const st = HF.state;
     const enemyPlayer = myPlayer === 'A' ? 'B' : 'A';
@@ -333,31 +333,36 @@
     const prob = HF.ai.enemyProbMap(enemyPlayer);
     if (prob.aliveCount === 0) return null;
     const topTargets = prob.candidates.slice(0, 6);
+    const enemyKingGuess = prob.candidates[0];  // 最可能是王的位置
     const myTraps = st.players[myPlayer].traps.length;
-    const canLaser = true;  // 能量机制已移除，激光随时可用
-    const canTrap = myTraps < HF.MAX_TRAPS;
+    const canLaser = true;
+    const canTrap = myTraps < HF.MAX_TRAPS && st.difficulty >= 1;
+
+    // === 局势判断 ===
+    const danger = kingDanger(myPlayer);
+    const myGuardCount = myPieces.filter(p => p.type === 'guard').length;
+    const enemyGuardCount = prob.aliveCount;
+    const isLateGame = myGuardCount <= 2 || enemyGuardCount <= 2;
+    const isWinning = myGuardCount > enemyGuardCount;
+    const myBlock = st.difficulty === 2 ? st.mandatoryBlocks[myPlayer] : null;
 
     let bestAction = null;
     let bestScore = -Infinity;
 
-    // === 防御检查：王危险高时优先用护卫挡枪，其次移王 ===
-    const danger = kingDanger(myPlayer);
+    // === 1. 防御优先：王高危时立即应对 ===
     if (danger >= 2 && HF.ai.difficulty >= 1) {
-      // 策略A：移护卫到王与敌方最近轨迹点之间（挡枪）
       const enemyTrails = st.trails.filter(t => t.player !== myPlayer);
       if (enemyTrails.length) {
         const lastTrail = enemyTrails[enemyTrails.length - 1];
-        // 找敌方轨迹离王最近的点
         let nearestEnemyPt = null, ned = Infinity;
         for (const pt of lastTrail.points) {
           const d = Math.hypot(pt.x - myKing.x, pt.y - myKing.y);
           if (d < ned) { ned = d; nearestEnemyPt = pt; }
         }
         if (nearestEnemyPt) {
-          // 挡枪点：王与敌方点连线中点附近
+          // 策略A：护卫挡枪（移到王与敌方轨迹连线中点）
           const bx = Math.round((myKing.x + nearestEnemyPt.x) / 2);
           const by = Math.round((myKing.y + nearestEnemyPt.y) / 2);
-          // 找能移到挡枪点的护卫
           let bestBlocker = null, bestBlockScore = -Infinity;
           for (const guard of myPieces.filter(p => p.type === 'guard')) {
             for (const dir of HF.DIRECTIONS) {
@@ -367,7 +372,7 @@
                 if (myPieces.some(p => p.id !== guard.id && p.x === nx && p.y === ny)) continue;
                 const distToBlock = Math.hypot(nx - bx, ny - by);
                 let s = -distToBlock * 3;
-                if (distToBlock < 0.5) s += 8;  // 成功挡枪
+                if (distToBlock < 0.5) s += 10;
                 s += Math.random() * 0.3;
                 if (s > bestBlockScore) { bestBlockScore = s; bestBlocker = { pieceId: guard.id, dx: dir.dx * steps, dy: dir.dy * steps }; }
               }
@@ -378,7 +383,7 @@
           }
         }
       }
-      // 策略B：移王逃跑
+      // 策略B：王逃跑（远离所有敌方轨迹和高概率区）
       let bestKingMove = null, bestKingScore = -Infinity;
       for (const dir of HF.DIRECTIONS) {
         for (const steps of [1, 2]) {
@@ -386,14 +391,16 @@
           const ny = myKing.y + dir.dy * steps;
           if (!HF.inBoard(nx, ny)) continue;
           if (myPieces.some(p => p.id !== myKing.id && p.x === nx && p.y === ny)) continue;
-          let d = 0;
+          let threat = 0;
           for (const tr of st.trails.filter(t => t.player !== myPlayer)) {
-            for (const pt of tr.points) d = Math.max(d, 3 - Math.hypot(nx - pt.x, ny - pt.y));
+            for (const pt of tr.points) threat = Math.max(threat, 3 - Math.hypot(nx - pt.x, ny - pt.y));
           }
           for (const t of topTargets) {
-            if (Math.hypot(nx - t.x, ny - t.y) < 2) d += t.prob * 5;
+            if (Math.hypot(nx - t.x, ny - t.y) < 2) threat += t.prob * 5;
           }
-          const s = -d + Math.random() * 0.3;
+          // 类人：逃跑时偏向己方底线（安全区）
+          const safeBias = myPlayer === 'A' ? -ny * 0.3 : ny * 0.3;
+          const s = -threat + safeBias + Math.random() * 0.3;
           if (s > bestKingScore) { bestKingScore = s; bestKingMove = { dx: dir.dx * steps, dy: dir.dy * steps }; }
         }
       }
@@ -402,22 +409,29 @@
       }
     }
 
-    // === 候选 1：激光发射 ===
+    // === 2. 激光射击评估 ===
     if (canLaser) {
-      // 困难模式：强制方块目标
-      const myBlock = st.difficulty === 2 ? st.mandatoryBlocks[myPlayer] : null;
-      for (const anchor of myPieces) {
+      // 类人：优先用最靠近敌方概率密集区的锚点射击
+      const anchorsByProximity = myPieces.map(pc => {
+        let nearness = 0;
+        for (const t of topTargets) nearness += t.prob / (1 + Math.hypot(pc.x - t.x, pc.y - t.y));
+        return { piece: pc, nearness };
+      }).sort((a, b) => b.nearness - a.nearness);
+
+      for (const { piece: anchor } of anchorsByProximity) {
         const descs = [];
+        // 针对性曲线：穿过高概率目标
         for (const desc of targetedCurves({ x: anchor.x, y: anchor.y }, topTargets.slice(0, 3))) {
           descs.push(desc);
         }
-        // 困难模式：生成经过锚点+强制方块的曲线
+        // 强制方块曲线
         if (myBlock) {
           for (const desc of targetedCurves({ x: anchor.x, y: anchor.y }, [myBlock])) {
             descs.push(desc);
           }
         }
-        const exploreCount = HF.ai.difficulty === 2 ? 4 : (HF.ai.difficulty === 1 ? 2 : 1);
+        // 通用模板探索
+        const exploreCount = HF.ai.difficulty === 2 ? 5 : (HF.ai.difficulty === 1 ? 3 : 1);
         for (const tmpl of AI_TEMPLATES) {
           for (let v = 0; v < exploreCount; v++) descs.push(tmpl(anchor.x, anchor.y));
         }
@@ -425,26 +439,28 @@
         for (const desc of descs) {
           const r = buildCurveSimple(desc);
           if (!r.ok) continue;
-          // 强大函数次数限制：超过本回合上限则跳过
-          if (isPowerfulDesc(desc) && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_TURN) continue;
+          if (isPowerfulDesc(desc) && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_GAME) continue;
           const dist = HF.anchorDistance(r.curve, anchor.x, anchor.y);
           if (dist >= 0.5) continue;
-          // 生成激光轨迹用于评估
-          const laserRes = HF.generateLaser(r.curve, { x: anchor.x, y: anchor.y }, [], anchor.id, true);
-          // 检查完整曲线是否经过强制方块（非激光截断点）
+          // 强制方块检查
           const passesBlock = myBlock ? HF.checkMandatoryBlock(r.curve, myPlayer) : true;
-          // 困难模式：未经过强制方块的曲线大幅降分（发射即判负）
           let blockPenalty = 0;
           if (myBlock && !passesBlock) blockPenalty = 2000;
           let score = expectedLaserScore(r.curve, { x: anchor.x, y: anchor.y }, anchor.id, myPlayer, prob);
           score -= blockPenalty;
+          // 避免误伤己方王
           if (myKing.id !== anchor.id) {
             const myResult = HF.generateLaser(r.curve, { x: anchor.x, y: anchor.y }, [myKing], anchor.id, true);
             for (const pt of myResult.points) {
               if (Math.hypot(pt.x - myKing.x, pt.y - myKing.y) < 0.6) { score -= 200; break; }
             }
           }
-          // 近期用过的曲线降分，鼓励多样性
+          // 类人：强力函数留到关键时刻（残局或能击杀王时加分）
+          if (isPowerfulDesc(desc)) {
+            if (isLateGame) score += 5;  // 残局值得用
+            else score -= 3;             // 开局不浪费
+          }
+          // 近期曲线降分
           if (isRecentCurve(r.label)) score -= 5;
           score += Math.random() * 0.5;
           if (score > bestScore) {
@@ -455,33 +471,33 @@
       }
     }
 
-    // === 候选 2：埋设陷阱（未满上限，困难/普通难度才用） ===
-    if (canTrap && HF.ai.difficulty >= 1) {
-      // 策略 A：在己方王周围埋陷阱（防御）
-      for (const dir of HF.DIRECTIONS) {
-        const tx = myKing.x + dir.dx, ty = myKing.y + dir.dy;
-        if (!HF.inBoard(tx, ty)) continue;
-        if (myPieces.some(p => p.alive && p.x === tx && p.y === ty)) continue;
-        if (st.players[myPlayer].traps.some(t => t.x === tx && t.y === ty)) continue;
-        // 王周围有敌方轨迹经过时优先埋
-        let trailNear = 0;
-        for (const tr of st.trails.filter(t => t.player !== myPlayer)) {
-          for (const pt of tr.points) {
-            if (Math.hypot(pt.x - tx, pt.y - ty) < 1.5) trailNear += 1;
+    // === 3. 陷阱策略（类人：防御+进攻双线） ===
+    if (canTrap) {
+      // 策略A：王周围防御陷阱（仅危险时或早期）
+      if (danger >= 1 || myTraps === 0) {
+        for (const dir of HF.DIRECTIONS) {
+          const tx = myKing.x + dir.dx, ty = myKing.y + dir.dy;
+          if (!HF.inBoard(tx, ty)) continue;
+          if (myPieces.some(p => p.alive && p.x === tx && p.y === ty)) continue;
+          if (st.players[myPlayer].traps.some(t => t.x === tx && t.y === ty)) continue;
+          let trailNear = 0;
+          for (const tr of st.trails.filter(t => t.player !== myPlayer)) {
+            for (const pt of tr.points) {
+              if (Math.hypot(pt.x - tx, pt.y - ty) < 1.5) trailNear += 1;
+            }
           }
-        }
-        if (trailNear > 0 || danger >= 1) {
-          const score = 4 + trailNear * 2 + danger * 2 + Math.random() * 0.3;
-          if (score > bestScore) {
-            bestScore = score;
-            bestAction = { type: 'trap', pieceId: myKing.id, x: tx, y: ty };
+          if (trailNear > 0 || danger >= 1) {
+            const score = 5 + trailNear * 2 + danger * 3 + Math.random() * 0.3;
+            if (score > bestScore) {
+              bestScore = score;
+              bestAction = { type: 'trap', pieceId: myKing.id, x: tx, y: ty };
+            }
           }
         }
       }
-      // 策略 B：在高概率敌方路径上埋陷阱（进攻，困难难度）
+      // 策略B：进攻陷阱埋在敌方高概率路径上（困难难度）
       if (HF.ai.difficulty === 2) {
-        for (const t of topTargets.slice(0, 3)) {
-          // 选离己方某棋子相邻的高概率格
+        for (const t of topTargets.slice(0, 4)) {
           for (const piece of myPieces) {
             if (Math.hypot(piece.x - t.x, piece.y - t.y) > 3) continue;
             for (const dir of HF.DIRECTIONS) {
@@ -490,7 +506,8 @@
               if (myPieces.some(p => p.alive && p.x === tx && p.y === ty)) continue;
               if (st.players[myPlayer].traps.some(tr => tr.x === tx && tr.y === ty)) continue;
               const tp = prob.grid.get(tx + ',' + ty) || 0;
-              const score = tp * 30 + 2 + Math.random() * 0.3;
+              // 类人：优先埋在敌方可能移动到的格点（路径预测）
+              const score = tp * 35 + 3 + Math.random() * 0.3;
               if (score > bestScore) {
                 bestScore = score;
                 bestAction = { type: 'trap', pieceId: piece.id, x: tx, y: ty };
@@ -501,9 +518,8 @@
       }
     }
 
-    // === 候选 3：移动（分散进攻，不同护卫瞄准不同目标） ===
-    const enemyKingGuess = prob.candidates[0];
-    // 为每个护卫分配不同进攻目标（声东击西，避免集中）
+    // === 4. 移动策略（类人：局势驱动——劣势保守、优势进攻） ===
+    // 为每个护卫分配不同进攻目标（声东击西）
     const guards = myPieces.filter(p => p.type === 'guard');
     const assignTargets = [];
     for (let gi = 0; gi < guards.length; gi++) {
@@ -519,13 +535,17 @@
           if (myPieces.some(p => p.id !== piece.id && p.x === nx && p.y === ny)) continue;
           let score = 0;
           if (piece.type === 'king') {
-            let dng = 0;
-            for (const t of topTargets) {
-              if (Math.hypot(nx - t.x, ny - t.y) < 2) dng += t.prob * 10;
+            // 王：仅劣势且危险时才移动，否则不动
+            if (!isWinning && danger >= 1) {
+              let dng = 0;
+              for (const t of topTargets) {
+                if (Math.hypot(nx - t.x, ny - t.y) < 2) dng += t.prob * 10;
+              }
+              score = -dng + 1;  // 给点基础分鼓励移动
+            } else {
+              continue;  // 优势时不挪王
             }
-            score = -dng;
           } else {
-            // 分散进攻：每个护卫追自己分配的目标
             const myTarget = assignTargets[piece.id] || enemyKingGuess;
             if (myTarget) {
               const dOld = Math.hypot(piece.x - myTarget.x, piece.y - myTarget.y);
@@ -534,6 +554,17 @@
             }
             const tp = prob.grid.get(nx + ',' + ny) || 0;
             score -= tp * 4;
+            // 类人：劣势时护卫回防王（靠近己方王）
+            if (!isWinning) {
+              const dKingOld = Math.hypot(piece.x - myKing.x, piece.y - myKing.y);
+              const dKingNew = Math.hypot(nx - myKing.x, ny - myKing.y);
+              if (dKingNew < dKingOld && dKingNew <= 3) score += 2;
+            }
+            // 类人：优势时护卫激进推进（靠近敌方区域）
+            if (isWinning) {
+              const enemyDir = myPlayer === 'A' ? ny : -ny;
+              score += enemyDir * 0.5;
+            }
           }
           score += Math.random() * 0.3;
           score -= 3;

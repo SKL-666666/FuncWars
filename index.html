@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>函数战局</title>
-<link rel="stylesheet" href="style.css?v=26" />
+<link rel="stylesheet" href="style.css?v=27" />
 <script src="https://cdn.jsdelivr.net/npm/mathjs@12.4.1/lib/browser/math.js"></script>
 <script src="peerjs.min.js"></script>
 </head>
@@ -81,10 +81,20 @@
       </div>
       <button id="btn-rules" class="btn ghost">规则速览</button>
       <div id="rules-panel" class="rules-panel hidden">
-        <p>11×11 坐标棋盘，双方各 5 子（1 王 4 护卫），布阵于己方区域（共享中线 y=0）。</p>
-        <p>每回合三选一：<b>移动</b>（8方向1-2格，撞敌同归于尽）· <b>激光</b>（输入y=f(x)，曲线须擦过锚点0.5内）· <b>陷阱</b>（相邻格埋设，每方限3个）。</p>
-        <p>激光遇镜面反射，遇棋子即止。<b>共振连锁</b>：命中点1格内其他棋子被连锁引爆。</p>
-        <p><b>简单</b>：无陷阱 · <b>普通</b>：含陷阱 · <b>困难</b>：每两回合刷新强制方块，函数必须经过否则判负。</p>
+        <p><b>棋盘</b>：11×11 坐标系（x,y ∈ [-5,5]），双方各 5 子（1 王 + 4 护卫）。</p>
+        <p><b>布阵</b>：A 布于 y∈[-3,0]，B 布于 y∈[0,3]，共享中线 y=0。王必须放置，护卫分散配置。禁止放置在中线 y=0 上。</p>
+        <p><b>每回合三选一</b>：</p>
+        <p>· <b>移动</b>：8 方向 1-2 格，移至敌方棋子同格则同归于尽。</p>
+        <p>· <b>激光</b>：输入函数 y=f(x) 或参数方程，曲线须擦过己方锚点（距离&lt;0.5）。激光遇镜面反射、遇棋子停止、命中即杀。</p>
+        <p>· <b>陷阱</b>：在相邻格埋设（每方限 3 个），敌方棋子移动或激光经过时触发爆炸。仅己方可见。</p>
+        <p><b>共振连锁</b>：激光命中点 1 格内若有其他棋子，连锁引爆（王也可被连锁击杀）。</p>
+        <p><b>强力函数限制</b>：三角函数、椭圆、玫瑰线等覆盖面广的函数每局限用 1 次；直线、抛物线等简单函数无限制。</p>
+        <p><b>难度</b>（所有模式通用）：</p>
+        <p>· <b>简单</b>：无陷阱，纯粹函数对决。</p>
+        <p>· <b>普通</b>：含陷阱机制，完整玩法。</p>
+        <p>· <b>困难</b>：A/B 大回合交替刷新强制方块（奇数大回合 A 需击中、偶数大回合 B 需击中），函数曲线必须经过方块否则判负。</p>
+        <p><b>胜负</b>：击杀敌方王获胜；强制方块未经过判负；王被移动撞击亦亡。</p>
+        <p><b>模式</b>：同屏对战 / 人机对战 / 公网联机（PeerJS P2P 直连）。</p>
       </div>
     </div>
   </section>
@@ -108,12 +118,12 @@
 
 </div>
 
-<script src="js/game-state.js?v=26"></script>
-<script src="js/math-engine.js?v=26"></script>
-<script src="js/renderer.js?v=26"></script>
-<script src="js/ai.js?v=26"></script>
-<script src="js/net.js?v=26"></script>
-<script src="js/ui.js?v=26"></script>
-<script src="js/main.js?v=26"></script>
+<script src="js/game-state.js?v=27"></script>
+<script src="js/math-engine.js?v=27"></script>
+<script src="js/renderer.js?v=27"></script>
+<script src="js/ai.js?v=27"></script>
+<script src="js/net.js?v=27"></script>
+<script src="js/ui.js?v=27"></script>
+<script src="js/main.js?v=27"></script>
 </body>
 </html>

@@ -231,8 +231,8 @@
     st.previewLaser = { points: result.points };
     if (dist < 0.5) {
       const powerful = isPowerfulFunction(activePresetIdx, r.label, desc);
-      const remain = HF.POWERFUL_MAX_PER_TURN - st.powerfulLaserUsed;
-      const tag = powerful ? ` [强力 剩${remain}/${HF.POWERFUL_MAX_PER_TURN}]` : ' [简单 无限]';
+      const remain = HF.POWERFUL_MAX_PER_GAME - st.powerfulLaserUsed;
+      const tag = powerful ? (remain > 0 ? ` [强力 剩${remain}/${HF.POWERFUL_MAX_PER_GAME}局]` : ` [强力已用尽]`) : ' [简单 无限]';
       flashHint('预览：' + r.label + ' ✓' + tag);
     } else {
       flashHint('预览：' + r.label + ' (距锚点' + dist.toFixed(2) + '，需<0.5)');
@@ -292,9 +292,9 @@
         const b = st.mandatoryBlocks[st.turn];
         info += ` · 必经(${b.x},${b.y})`;
       }
-      // 强大函数剩余次数提示（三角/参数化曲线每回合限2次）
-      const remain = HF.POWERFUL_MAX_PER_TURN - st.powerfulLaserUsed;
-      info += ` · 强力${remain}/${HF.POWERFUL_MAX_PER_TURN}`;
+      // 强大函数剩余次数提示（三角/参数化曲线每局限1次）
+      const remain = HF.POWERFUL_MAX_PER_GAME - st.powerfulLaserUsed;
+      info += ` · 强力${remain}/${HF.POWERFUL_MAX_PER_GAME}局`;
       $('info').textContent = info;
       setActionMode(st.actionMode);
     }
@@ -912,10 +912,10 @@
     const dist = HF.anchorDistance(curve, anchor.x, anchor.y);
     if (dist >= 0.5) { flashHint(`锚点到曲线距离 ${dist.toFixed(2)} ≥ 0.5，发射无效`); return; }
 
-    // 强大函数次数限制：三角/参数化曲线每回合最多2次，简单函数无限制
+    // 强大函数次数限制：三角/参数化曲线每局限1次，简单函数无限制
     const isPowerful = isPowerfulFunction(activePresetIdx, label, desc);
-    if (isPowerful && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_TURN) {
-      flashHint(`强大函数本回合已用 ${HF.POWERFUL_MAX_PER_TURN} 次，请使用简单函数或移动/陷阱`);
+    if (isPowerful && st.powerfulLaserUsed >= HF.POWERFUL_MAX_PER_GAME) {
+      flashHint(`强力函数本局已用尽（每局限${HF.POWERFUL_MAX_PER_GAME}次），请使用简单函数或移动/陷阱`);
       return;
     }
 

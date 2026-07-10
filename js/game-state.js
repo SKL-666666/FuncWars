@@ -56,12 +56,12 @@
       busy: false,             // 动作动画进行中，禁止操作
       previewLaser: null,      // 预览激光轨迹（未发射，实时渲染）
       resonanceChain: null,    // 共振连锁动画 {chains, startTime}
-      powerfulLaserUsed: 0,    // 本回合已用强大函数次数
+      powerfulLaserUsed: 0,    // 本局已用强大函数次数（全局累计，每局最多1次）
     };
   }
   // 强大函数类型：三角函数、椭圆、玫瑰线、螺旋线、心形线、双纽线（覆盖面广）
   HF.POWERFUL_PRESETS = ['sin', 'cos', 'tan', 'tanh', '椭圆', '玫瑰线', '螺旋线', '心形线', '双纽线', '正弦+余弦'];
-  HF.POWERFUL_MAX_PER_TURN = 2;
+  HF.POWERFUL_MAX_PER_GAME = 1;  // 每局最多1次
 
   HF.newGame = function () {
     HF.state = freshState();
@@ -305,7 +305,6 @@
     st.actionMode = 'move';
     st.currentLaser = null;
     st.resonanceChain = null;
-    st.powerfulLaserUsed = 0;  // 新回合重置强大函数计数
   };
 
   // 工具：获取当前玩家存活棋子
